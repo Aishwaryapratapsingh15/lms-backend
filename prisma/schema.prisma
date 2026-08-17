@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  SALES
+}
+
+enum LeadSource {
+  WEBSITE
+  CALL
+  SOCIAL_MEDIA
+  REFERENCE
+  PARTNER
+  EMAIL
+  OTHER
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  FOLLOW_UP
+  QUALIFIED
+  PROPOSAL
+  WON
+  LOST
+  PROJECT_IS_OURS
+}
+
+enum LeadPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum FollowUpType {
+  CALL
+  EMAIL
+  MEETING
+  NOTE
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum TokenType {
+  ACCESS
+  REFRESH
+}
+
+model User {
+  id            String         @id @default(uuid())
+  name          String
+  email         String         @unique
+  password      String
+  role          Role           @default(SALES)
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  leadsCreated  Lead[]         @relation("CreatedLeads")
+  assignedLeads Lead[]         @relation("AssignedLeads")
+  followUps     LeadFollowUp[]
+  sentEmails    EmailLog[]
+  refreshTokens RefreshToken[]
+}
+
+model RefreshToken {
+  id        String      @id @default(uuid())
+  token     String      @unique
+  userId    String
+  type      TokenType   @default(REFRESH)
+  expiresAt DateTime
+  revoked   Boolean     @default(false)
+  createdAt DateTime    @default(now())
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Lead {
+  id             String         @id @default(uuid())
+  fullName       String
+  email          String?
+  phone          String?
+  company        String?
+  source         LeadSource     @default(WEBSITE)
+  status         LeadStatus     @default(NEW)
+  priority       LeadPriority   @default(MEDIUM)
+  assignedToId   String?
+  createdById    String?
+  notes          String?
+  nextFollowUpAt DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  assignedTo     User?          @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdBy      User?          @relation("CreatedLeads", fields: [createdById], references: [id], onDelete: SetNull)
+  followUps      LeadFollowUp[]
+  emailLogs      EmailLog[]
+}
+
+model LeadFollowUp {
+  id             String       @id @default(uuid())
+  leadId         String
+  userId         String
+  type           FollowUpType @default(CALL)
+  notes          String
+  nextFollowUpAt DateTime?
+  createdAt      DateTime     @default(now())
+  lead           Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmailLog {
+  id        String      @id @default(uuid())
+  leadId    String?
+  userId    String?
+  toEmail   String
+  ccEmails  String[]
+  bccEmails String[]
+  subject   String
+  body      String
+  status    EmailStatus @default(PENDING)
+  sentAt    DateTime?
+  createdAt DateTime    @default(now())
+  lead      Lead?       @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
