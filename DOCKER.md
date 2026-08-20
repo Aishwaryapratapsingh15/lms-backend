@@ -10,7 +10,7 @@ The stack uses one canonical Compose file: `compose.yaml`.
 - `postgres` stores data in the persistent `postgres_data` Docker volume.
 - `backend` runs pending Prisma migrations and then starts NestJS.
 - `seed-admin` is an explicit one-time tool; normal startup never seeds data.
-- PostgreSQL has no host port, and the API binds only to `127.0.0.1:4000` for Nginx.
+- PostgreSQL has no host port, and the API binds only to `127.0.0.1:4010` for Nginx.
 - `FRONTEND_URL` is the separately deployed frontend URL used by backend CORS.
 
 ## 1. VPS prerequisites
@@ -38,7 +38,7 @@ docker --version
 docker compose version
 ```
 
-Allow only SSH, HTTP, and HTTPS through the VPS firewall. Do not open ports `4000`
+Allow only SSH, HTTP, and HTTPS through the VPS firewall. Do not open ports `4010`
 or `5432` publicly.
 
 ## 2. Clone the backend
@@ -101,7 +101,7 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-The Nginx host proxies the public API domain to `127.0.0.1:4000`. Do not reload
+The Nginx host proxies the public API domain to `127.0.0.1:4010`. Do not reload
 Nginx unless `sudo nginx -t` succeeds.
 
 ## 7. Enable HTTPS
