@@ -9,7 +9,7 @@ The stack uses one canonical Compose file: `compose.yaml`.
 
 - `postgres` stores data in the persistent `postgres_data` Docker volume.
 - `backend` runs pending Prisma migrations and then starts NestJS.
-- `seed-admin` is an explicit one-time tool; normal startup never seeds data.
+- The admin seed is an explicit backend command; normal startup never seeds data.
 - PostgreSQL has no host port, and the API binds only to `127.0.0.1:4010` for Nginx.
 - `FRONTEND_URL` is the separately deployed frontend URL used by backend CORS.
 
@@ -51,8 +51,6 @@ git clone https://github.com/Aishwaryapratapsingh15/lms-backend.git
 cd lms-backend
 ```
 
-The frontend can be deployed independently on another server, platform, or domain.
-
 ## 3. Copy the private environment file
 
 Copy the prepared private `.env` from the trusted workstation into
@@ -81,7 +79,7 @@ and starts only if migrations succeed.
 ## 5. Create the first Super Admin once
 
 ```bash
-docker compose run --rm seed-admin
+docker compose run --rm backend node dist/scripts/seed-admin.js
 ```
 
 This creates one `SUPER_ADMIN` from `INITIAL_ADMIN_*`. If the email already exists,
@@ -127,8 +125,8 @@ docker compose ps
 docker compose logs --tail=100 backend postgres
 ```
 
-Do not run `seed-admin`. Pending migrations apply automatically, while existing
-users, passwords, leads, and form submissions remain unchanged in PostgreSQL.
+Do not run the admin seed command. Pending migrations apply automatically, while
+existing users, passwords, leads, and form submissions remain unchanged in PostgreSQL.
 
 ## 9. Common operations
 
