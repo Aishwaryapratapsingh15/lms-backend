@@ -5,7 +5,6 @@ coverage
 .gitignore
 .env
 .env.*
-!.env.example
 npm-debug.log*
 Dockerfile*
 compose*.yaml

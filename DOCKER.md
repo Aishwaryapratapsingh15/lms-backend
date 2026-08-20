@@ -53,46 +53,18 @@ cd lms-backend
 
 The frontend can be deployed independently on another server, platform, or domain.
 
-## 3. Configure environment variables
+## 3. Copy the private environment file
+
+Copy the prepared private `.env` from the trusted workstation into
+`/opt/eice/lms-backend/.env`, then protect it:
 
 ```bash
-cp .env.example .env
-nano .env
+cd /opt/eice/lms-backend
 chmod 600 .env
 ```
 
-Replace all placeholders. The essential production values include:
-
-```dotenv
-POSTGRES_DB=lms_db
-POSTGRES_USER=lms_user
-POSTGRES_PASSWORD=A_STRONG_DATABASE_PASSWORD
-DATABASE_URL=postgresql://lms_user:URL_ENCODED_DATABASE_PASSWORD@postgres:5432/lms_db?schema=public
-
-JWT_ACCESS_SECRET=A_LONG_RANDOM_SECRET
-JWT_REFRESH_SECRET=ANOTHER_LONG_RANDOM_SECRET
-PUBLIC_OTP_HASH_SECRET=A_THIRD_LONG_RANDOM_SECRET
-COOKIE_SECURE=true
-
-# Exact public URL of the separately deployed frontend; no trailing slash.
-FRONTEND_URL=https://lms.example.com
-
-INITIAL_ADMIN_NAME=Super Admin
-INITIAL_ADMIN_EMAIL=admin@example.com
-INITIAL_ADMIN_PASSWORD=A_UNIQUE_PASSWORD_WITH_AT_LEAST_12_CHARACTERS
-```
-
-`POSTGRES_PASSWORD` is the raw database password. URL-encode special characters in
-the same password when placing it inside `DATABASE_URL`. Configure the SMTP and
-public-form recipient variables from `.env.example` as well.
-
-Generate independent secrets with a password manager or:
-
-```bash
-openssl rand -hex 32
-```
-
-Never commit `.env`.
+The file already contains the PostgreSQL, Prisma, JWT, CORS, SMTP, OTP, recipient,
+and initial admin settings. Never commit or send `.env` through an insecure channel.
 
 ## 4. First deployment
 

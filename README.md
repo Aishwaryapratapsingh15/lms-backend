@@ -46,10 +46,10 @@ This project is a NestJS + TypeScript backend for a Lead Management System with 
    npm install
    ```
 
-2. Create environment file
+2. Place the private environment file in the repository root
 
-   ```bash
-   cp .env.example .env
+   ```text
+   .env
    ```
 
 3. Start PostgreSQL and create a database named `lms_db`
