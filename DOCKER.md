@@ -56,7 +56,7 @@ The frontend can be deployed independently on another server, platform, or domai
 ## 3. Configure environment variables
 
 ```bash
-cp .env.docker.example .env
+cp .env.example .env
 nano .env
 chmod 600 .env
 ```
@@ -84,7 +84,7 @@ INITIAL_ADMIN_PASSWORD=A_UNIQUE_PASSWORD_WITH_AT_LEAST_12_CHARACTERS
 
 `POSTGRES_PASSWORD` is the raw database password. URL-encode special characters in
 the same password when placing it inside `DATABASE_URL`. Configure the SMTP and
-public-form recipient variables from `.env.docker.example` as well.
+public-form recipient variables from `.env.example` as well.
 
 Generate independent secrets with a password manager or:
 
