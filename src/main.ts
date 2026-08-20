@@ -3,17 +3,37 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
+import type { CorsOptions } from 'cors';
+import type { Request } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.use(cookieParser());
+  const publicFormPaths = new Set([
+    '/otp.php',
+    '/changeEmail.php',
+    '/finalsubmission.php',
+    '/contact.php',
+  ]);
   app.use(
-    cors({
-      origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-      credentials: true,
-    }),
+    cors(
+      (
+        request: Request,
+        callback: (error: Error | null, options?: CorsOptions) => void,
+      ) => {
+        const isPublicForm =
+          publicFormPaths.has(request.path) ||
+          request.path.startsWith('/public/forms/');
+        callback(null, {
+          origin: isPublicForm
+            ? true
+            : process.env.FRONTEND_URL || 'http://localhost:3000',
+          credentials: !isPublicForm,
+        });
+      },
+    ),
   );
 
   app.useGlobalPipes(
@@ -26,7 +46,9 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('Lead Management System API')
-    .setDescription('Backend documentation for Super Admin, Admin and Sales workflows.')
+    .setDescription(
+      'Backend documentation for Super Admin, Admin and Sales workflows.',
+    )
     .setVersion('1.0')
     .addBearerAuth()
     .build();

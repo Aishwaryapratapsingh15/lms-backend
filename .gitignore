@@ -3,6 +3,5 @@ node_modules
 .env.local
 dist
 coverage
-prisma/migrations
 .DS_Store
 npm-debug.log*

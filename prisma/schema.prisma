@@ -75,14 +75,14 @@ model User {
 }
 
 model RefreshToken {
-  id        String      @id @default(uuid())
-  token     String      @unique
+  id        String    @id @default(uuid())
+  token     String    @unique
   userId    String
-  type      TokenType   @default(REFRESH)
+  type      TokenType @default(REFRESH)
   expiresAt DateTime
-  revoked   Boolean     @default(false)
-  createdAt DateTime    @default(now())
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  revoked   Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Lead {
@@ -132,4 +132,45 @@ model EmailLog {
   createdAt DateTime    @default(now())
   lead      Lead?       @relation(fields: [leadId], references: [id], onDelete: SetNull)
   user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model PublicEmailOtp {
+  email      String   @id
+  otpHash    String   @map("otp")
+  expiresAt  DateTime
+  lastSentAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("email_otp")
+}
+
+model ContactSubmission {
+  id          String   @id @default(uuid())
+  name        String
+  companyName String
+  role        String?
+  email       String
+  phone       String
+  phoneCode   String
+  country     String?
+  address     String
+  requirement String
+  product     String?
+  message     String?
+  createdAt   DateTime @default(now())
+
+  @@map("contact_submissions")
+}
+
+model PublicFormSubmission {
+  id        String   @id @default(uuid())
+  name      String?
+  email     String
+  contact   String?
+  service   String?
+  message   String?
+  createdAt DateTime @default(now())
+
+  @@map("formmodel")
 }
