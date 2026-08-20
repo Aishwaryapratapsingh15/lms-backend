@@ -41,11 +41,13 @@ This project is a NestJS + TypeScript backend for a Lead Management System with 
 ## Local Setup
 
 1. Install dependencies
+
    ```bash
    npm install
    ```
 
 2. Create environment file
+
    ```bash
    cp .env.example .env
    ```
@@ -53,11 +55,13 @@ This project is a NestJS + TypeScript backend for a Lead Management System with 
 3. Start PostgreSQL and create a database named `lms_db`
 
 4. Run Prisma migration
+
    ```bash
    npx prisma migrate dev --name init
    ```
 
 5. Start backend in development mode
+
    ```bash
    npm run start:dev
    ```
@@ -67,17 +71,21 @@ This project is a NestJS + TypeScript backend for a Lead Management System with 
    http://localhost:4000/api/docs
    ```
 
-## Default Seed User
+## Initial Super Admin
 
-- Email: `superadmin@lms.com`
-- Password: `admin123`
+Application startup never seeds users or demo leads. After migrations have run,
+create the first Super Admin explicitly with the one-time command documented in
+`DOCKER.md`. Credentials are read from environment variables and an existing user
+is never modified.
 
 ## Authentication Flow
 
 ### 1) Get CSRF token
+
 `GET /auth/csrf`
 
 Response:
+
 ```json
 {
   "csrfToken": "<generated-token>"
@@ -85,34 +93,39 @@ Response:
 ```
 
 Use this token in the next login/refresh request:
+
 ```http
 x-csrf-token: <generated-token>
 ```
 
 ### 2) Login
+
 `POST /auth/login`
 
 Request body:
+
 ```json
 {
-  "email": "superadmin@lms.com",
-  "password": "admin123"
+  "email": "<INITIAL_ADMIN_EMAIL>",
+  "password": "<INITIAL_ADMIN_PASSWORD>"
 }
 ```
 
 Required headers:
+
 ```http
 Content-Type: application/json
 x-csrf-token: <generated-token>
 ```
 
 Response:
+
 ```json
 {
   "user": {
     "id": "...",
     "name": "Super Admin",
-    "email": "superadmin@lms.com",
+    "email": "<INITIAL_ADMIN_EMAIL>",
     "role": "SUPER_ADMIN"
   },
   "accessToken": "...",
@@ -122,9 +135,11 @@ Response:
 ```
 
 ### 3) Refresh token
+
 `POST /auth/refresh`
 
 Required headers:
+
 ```http
 Authorization: Bearer <access-token>
 x-refresh-token: <refresh-token>
@@ -134,6 +149,7 @@ x-csrf-token: <generated-token>
 ## Protected Endpoints
 
 All production endpoints below require:
+
 ```http
 Authorization: Bearer <accessToken>
 ```
@@ -141,9 +157,11 @@ Authorization: Bearer <accessToken>
 ## Lead APIs
 
 ### Create lead
+
 `POST /leads`
 
 Body:
+
 ```json
 {
   "fullName": "Rizwan Ali",
@@ -160,18 +178,23 @@ Body:
 ```
 
 ### List leads
+
 `GET /leads`
 
 ### Dashboard summary
+
 `GET /leads/dashboard`
 
 ### Get one lead
+
 `GET /leads/:id`
 
 ### Assign lead
+
 `PATCH /leads/:id/assign`
 
 Body:
+
 ```json
 {
   "assignedToId": "sales-user-id"
@@ -179,9 +202,11 @@ Body:
 ```
 
 ### Update lead status
+
 `PATCH /leads/:id/status`
 
 Body:
+
 ```json
 {
   "status": "PROJECT_IS_OURS"
@@ -189,9 +214,11 @@ Body:
 ```
 
 ### Add follow-up
+
 `POST /leads/follow-up`
 
 Body:
+
 ```json
 {
   "leadId": "lead-id",
@@ -205,9 +232,11 @@ Body:
 ## Email APIs
 
 ### Send email to lead
+
 `POST /emails/send`
 
 Body:
+
 ```json
 {
   "leadId": "lead-id",
@@ -225,9 +254,11 @@ The API also appends the configured admin visibility BCC list automatically when
 ## User APIs
 
 ### Create user
+
 `POST /users`
 
 Body:
+
 ```json
 {
   "name": "Sales Executive",
@@ -238,9 +269,11 @@ Body:
 ```
 
 ### List users
+
 `GET /users`
 
 ### Get single user
+
 `GET /users/:id`
 
 ## Role Matrix

@@ -11,7 +11,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lms_user} -d ${POSTGRES_DB:-lms_db}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-lms_user} -d ${POSTGRES_DB:-lms_db}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -19,6 +23,7 @@ services:
       - lms_network
 
   backend:
+    image: eice-lms-backend:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -29,19 +34,41 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-lms_user}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-lms_db}?schema=public
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/docs').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/api/docs').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
       interval: 15s
       timeout: 5s
       retries: 10
       start_period: 20s
+    networks:
+      - lms_network
+
+  seed-admin:
+    image: eice-lms-backend:latest
+    profiles: ["tools"]
+    init: true
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+    command: ["node", "dist/scripts/seed-admin.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - lms_network
 
@@ -58,12 +85,18 @@ services:
       PORT: 3000
       HOSTNAME: 0.0.0.0
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
       interval: 15s
       timeout: 5s
       retries: 10

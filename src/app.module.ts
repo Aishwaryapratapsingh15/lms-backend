@@ -5,7 +5,6 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { LeadsModule } from './leads/leads.module';
 import { EmailModule } from './email/email.module';
-import { SeedModule } from './seed/seed.module';
 import { PublicFormsModule } from './public-forms/public-forms.module';
 
 @Module({
@@ -16,7 +15,6 @@ import { PublicFormsModule } from './public-forms/public-forms.module';
     UsersModule,
     LeadsModule,
     EmailModule,
-    SeedModule,
     PublicFormsModule,
   ],
 })

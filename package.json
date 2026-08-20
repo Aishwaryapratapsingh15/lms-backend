@@ -11,7 +11,9 @@
     "lint": "eslint . --ext .ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "seed:admin": "node dist/scripts/seed-admin.js",
+    "seed:admin:dev": "ts-node src/scripts/seed-admin.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.29",
