@@ -6,11 +6,19 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { RefreshTokenService } from './refresh-token.service';
 import { CsrfTokenService } from './csrf.service';
+import { EmailModule } from '../email/email.module';
+import { RateLimitGuard } from '../common/guards/rate-limit.guard';
 
 @Module({
-  imports: [PassportModule, JwtModule.register({})],
+  imports: [PassportModule, JwtModule.register({}), EmailModule],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, RefreshTokenService, CsrfTokenService],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    RefreshTokenService,
+    CsrfTokenService,
+    RateLimitGuard,
+  ],
   exports: [AuthService, RefreshTokenService, CsrfTokenService],
 })
 export class AuthModule {}

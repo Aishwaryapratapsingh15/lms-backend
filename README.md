@@ -2,6 +2,9 @@
 
 This project is a NestJS + TypeScript backend for a Lead Management System with role-based access control, lead lifecycle management, dashboard metrics, and email tracking.
 
+Frontend implementation contracts for authentication, leads, reminders, dashboard,
+roles, and error handling are documented in `FRONTEND_HANDOFF.md`.
+
 ## Tech Stack
 
 - Node.js
@@ -172,7 +175,6 @@ Body:
   "status": "NEW",
   "priority": "HIGH",
   "notes": "Interested in a custom solution",
-  "createdById": "user-id",
   "assignedToId": "sales-user-id"
 }
 ```
@@ -222,7 +224,6 @@ Body:
 ```json
 {
   "leadId": "lead-id",
-  "userId": "user-id",
   "type": "CALL",
   "notes": "Client requested pricing details",
   "nextFollowUpAt": "2026-08-15T15:00:00.000Z"
@@ -240,7 +241,6 @@ Body:
 ```json
 {
   "leadId": "lead-id",
-  "userId": "sender-id",
   "toEmail": "customer@example.com",
   "ccEmails": ["manager@example.com"],
   "bccEmails": ["superadmin@lms.com", "admin@lms.com"],

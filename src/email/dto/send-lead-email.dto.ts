@@ -7,11 +7,6 @@ export class SendLeadEmailDto {
   @IsString()
   leadId?: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  userId?: string;
-
   @ApiProperty()
   @IsString()
   toEmail!: string;

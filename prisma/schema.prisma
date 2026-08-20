@@ -58,20 +58,34 @@ enum TokenType {
   REFRESH
 }
 
+enum LeadActivityType {
+  CREATED
+  UPDATED
+  ASSIGNED
+  STATUS_CHANGED
+  FOLLOW_UP_ADDED
+  FOLLOW_UP_COMPLETED
+  EMAIL_SENT
+  ARCHIVED
+  RESTORED
+}
+
 model User {
-  id            String         @id @default(uuid())
-  name          String
-  email         String         @unique
-  password      String
-  role          Role           @default(SALES)
-  isActive      Boolean        @default(true)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  leadsCreated  Lead[]         @relation("CreatedLeads")
-  assignedLeads Lead[]         @relation("AssignedLeads")
-  followUps     LeadFollowUp[]
-  sentEmails    EmailLog[]
-  refreshTokens RefreshToken[]
+  id                  String               @id @default(uuid())
+  name                String
+  email               String               @unique
+  password            String
+  role                Role                 @default(SALES)
+  isActive            Boolean              @default(true)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  leadsCreated        Lead[]               @relation("CreatedLeads")
+  assignedLeads       Lead[]               @relation("AssignedLeads")
+  followUps           LeadFollowUp[]
+  sentEmails          EmailLog[]
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  leadActivities      LeadActivity[]
 }
 
 model RefreshToken {
@@ -83,6 +97,18 @@ model RefreshToken {
   revoked   Boolean   @default(false)
   createdAt DateTime  @default(now())
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
 }
 
 model Lead {
@@ -98,12 +124,19 @@ model Lead {
   createdById    String?
   notes          String?
   nextFollowUpAt DateTime?
+  archivedAt     DateTime?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   assignedTo     User?          @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
   createdBy      User?          @relation("CreatedLeads", fields: [createdById], references: [id], onDelete: SetNull)
   followUps      LeadFollowUp[]
   emailLogs      EmailLog[]
+  activities     LeadActivity[]
+
+  @@index([assignedToId, archivedAt, createdAt])
+  @@index([status, archivedAt])
+  @@index([email])
+  @@index([phone])
 }
 
 model LeadFollowUp {
@@ -113,9 +146,26 @@ model LeadFollowUp {
   type           FollowUpType @default(CALL)
   notes          String
   nextFollowUpAt DateTime?
+  completedAt    DateTime?
   createdAt      DateTime     @default(now())
   lead           Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([nextFollowUpAt, completedAt])
+}
+
+model LeadActivity {
+  id        String           @id @default(uuid())
+  leadId    String
+  actorId   String?
+  type      LeadActivityType
+  details   Json?
+  createdAt DateTime         @default(now())
+  lead      Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  actor     User?            @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([leadId, createdAt])
+  @@index([actorId, createdAt])
 }
 
 model EmailLog {

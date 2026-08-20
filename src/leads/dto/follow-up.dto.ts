@@ -7,10 +7,6 @@ export class FollowUpDto {
   @IsString()
   leadId!: string;
 
-  @ApiProperty()
-  @IsString()
-  userId!: string;
-
   @ApiProperty({ enum: FollowUpType })
   @IsEnum(FollowUpType)
   type!: FollowUpType;

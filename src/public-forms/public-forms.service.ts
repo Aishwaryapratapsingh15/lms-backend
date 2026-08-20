@@ -115,7 +115,7 @@ export class PublicFormsService {
         html: this.enquiryEmailHtml(dto),
         text: `User Query - Name: ${name}, Email: ${email}, Contact: ${dto.contact ?? ''}, Message: ${dto.message ?? ''}`,
       });
-    } catch (error) {
+    } catch {
       throw new InternalServerErrorException({
         status: 500,
         message: 'User data stored, but email sending failed',
@@ -184,7 +184,7 @@ export class PublicFormsService {
         html: this.contactEmailHtml(dto),
         text: `New contact form from ${dto.name.trim()}. Email: ${email}, Phone: +${dto.phoneCode.trim()} ${dto.phone.trim()}`,
       });
-    } catch (error) {
+    } catch {
       throw new InternalServerErrorException({
         status: 500,
         message: 'Form stored, but email failed to send.',

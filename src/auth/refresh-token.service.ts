@@ -16,8 +16,11 @@ export class RefreshTokenService {
     const token = this.jwtService.sign(
       { sub: userId, type: 'REFRESH' } as any,
       {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET') || 'refresh-secret',
-        expiresIn: (this.configService.get<string>('JWT_REFRESH_TTL') || '7d') as any,
+        secret:
+          this.configService.get<string>('JWT_REFRESH_SECRET') ||
+          'refresh-secret',
+        expiresIn: (this.configService.get<string>('JWT_REFRESH_TTL') ||
+          '7d') as any,
         issuer: this.configService.get<string>('JWT_ISSUER') || 'lms-backend',
       } as any,
     );
@@ -39,7 +42,9 @@ export class RefreshTokenService {
 
     try {
       payload = this.jwtService.verify(token, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET') || 'refresh-secret',
+        secret:
+          this.configService.get<string>('JWT_REFRESH_SECRET') ||
+          'refresh-secret',
         issuer: this.configService.get<string>('JWT_ISSUER') || 'lms-backend',
       });
     } catch {
@@ -51,7 +56,11 @@ export class RefreshTokenService {
       include: { user: true },
     });
 
-    if (!storedToken || storedToken.revoked || new Date(storedToken.expiresAt) < new Date()) {
+    if (
+      !storedToken ||
+      storedToken.revoked ||
+      new Date(storedToken.expiresAt) < new Date()
+    ) {
       throw new UnauthorizedException('Refresh token invalid or expired');
     }
 
@@ -59,7 +68,9 @@ export class RefreshTokenService {
   }
 
   async rotateRefreshToken(oldToken: string, userId: string): Promise<string> {
-    const existing = await this.prisma.refreshToken.findUnique({ where: { token: oldToken } });
+    const existing = await this.prisma.refreshToken.findUnique({
+      where: { token: oldToken },
+    });
     if (!existing) {
       throw new UnauthorizedException('Refresh token not found');
     }
@@ -70,5 +81,19 @@ export class RefreshTokenService {
     });
 
     return this.createRefreshToken(userId);
+  }
+
+  async revokeToken(token: string) {
+    await this.prisma.refreshToken.updateMany({
+      where: { token },
+      data: { revoked: true },
+    });
+  }
+
+  async revokeAllForUser(userId: string) {
+    await this.prisma.refreshToken.updateMany({
+      where: { userId, revoked: false },
+      data: { revoked: true },
+    });
   }
 }

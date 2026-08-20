@@ -13,11 +13,13 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     super();
   }
 
-  canActivate(context: ExecutionContext): boolean | Promise<boolean> | Observable<boolean> {
+  canActivate(
+    context: ExecutionContext,
+  ): boolean | Promise<boolean> | Observable<boolean> {
     return super.canActivate(context);
   }
 
-  handleRequest(err: unknown, user: any, info: unknown) {
+  handleRequest(err: unknown, user: any, _info: unknown) {
     if (err || !user) {
       throw err || new UnauthorizedException('Invalid or expired token');
     }
