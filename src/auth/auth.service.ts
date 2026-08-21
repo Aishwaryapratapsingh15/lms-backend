@@ -87,10 +87,26 @@ export class AuthService {
       user.id,
     );
 
+    const { password: _password, ...safeUser } = user;
+
     return {
+      user: safeUser,
       accessToken,
       refreshToken: newRefreshToken,
       expiresIn: this.configService.get<string>('JWT_ACCESS_TTL') || '15m',
+    };
+  }
+
+  async getProfile(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('User not found or inactive');
+    }
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.name,
     };
   }
 

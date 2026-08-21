@@ -6,5 +6,7 @@ export interface RequestWithUser extends Request {
     id: string;
     email: string;
     role: Role;
+    name: string;
+    exp: number;
   };
 }

@@ -69,11 +69,12 @@ chmod 600 .env
 
 Confirm these production settings without printing secret values:
 
-- `NODE_ENV=production`
+- `NODE_ENV=production` (also controls the `Secure` flag on the auth/CSRF cookies)
 - `DATABASE_URL` uses host `postgres` and database port `5432`
 - `FRONTEND_URL=https://leadflow.eicetechnology.com`
 - `PASSWORD_RESET_URL=https://leadflow.eicetechnology.com/reset-password`
-- `COOKIE_SECURE=true`
+- `CORS_ALLOWED_ORIGINS=https://leadflow.eicetechnology.com` (comma-separated if more than one origin needs access; required — the container will fail to start without it). This only restricts the LMS app's own endpoints — `/public/forms/*` and the legacy `.php` aliases (`otp.php`, `contact.php`, etc.) remain open to any origin, since those are embedded on other public-facing sites and never carry cookies.
+- `COOKIE_DOMAIN=.eicetechnology.com` (shares the `access_token`/`refresh_token`/`csrf_token` cookies across the `leadflow.` and `leadflowapi.` subdomains; leave unset for local development)
 - PostgreSQL, JWT, SMTP, OTP, recipient, and initial admin variables are set
 
 No `BACKEND_URL` environment variable is required. Nginx owns the public API

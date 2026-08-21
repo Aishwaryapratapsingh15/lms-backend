@@ -6,10 +6,12 @@ import { SubmitPublicFormDto } from './dto/submit-public-form.dto';
 import { PublicFormsService } from './public-forms.service';
 import { RateLimit } from '../common/decorators/rate-limit.decorator';
 import { RateLimitGuard } from '../common/guards/rate-limit.guard';
+import { SkipCsrf } from '../common/decorators/skip-csrf.decorator';
 
 @ApiTags('Public Forms')
 @Controller()
 @UseGuards(RateLimitGuard)
+@SkipCsrf()
 export class PublicFormsController {
   constructor(private readonly publicFormsService: PublicFormsService) {}
 

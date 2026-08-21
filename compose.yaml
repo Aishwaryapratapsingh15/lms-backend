@@ -36,6 +36,8 @@ services:
       PORT: 4000
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
       FRONTEND_URL: ${FRONTEND_URL:?Set FRONTEND_URL in .env}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?Set CORS_ALLOWED_ORIGINS in .env, e.g. the frontend origin}
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
     ports:
       - "127.0.0.1:4010:4000"
     depends_on:

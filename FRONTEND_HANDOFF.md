@@ -11,25 +11,44 @@ Swagger remains available at
 
 ## Authentication contract
 
-1. Call `GET /auth/csrf` and keep `csrfToken` in memory.
-2. Call `POST /auth/login` with header `x-csrf-token` and the email/password body.
-3. Send `Authorization: Bearer <accessToken>` on protected requests.
-4. If a protected request returns `401`, call `POST /auth/refresh` with
-   `x-refresh-token` and `x-csrf-token`. Refresh no longer requires a valid access
-   token. Store the rotated access and refresh tokens, then retry the original request once.
-5. On refresh failure, clear the session and return to login.
+Access and refresh tokens are **httpOnly cookies** now — the frontend never
+sees their values and must not try to store or attach them. Every request to
+the API (not just auth ones) must be sent with credentials included
+(`fetch(url, { credentials: 'include' })` / axios `withCredentials: true`),
+and every mutating request must carry a matching CSRF header.
 
-Do not retry `403`, `404`, `409`, or `429` as authentication failures.
+1. Call `GET /auth/csrf` once on app bootstrap (before the first login attempt
+   on a fresh browser). This sets a non-httpOnly `csrf_token` cookie.
+2. Before every `POST`/`PUT`/`PATCH`/`DELETE` request (to *any* endpoint,
+   except `/public/forms/*` and its legacy `.php` aliases), read the current
+   `csrf_token` cookie value and send it as the `x-csrf-token` header. It is
+   re-issued on every login/refresh, so always read fresh — never cache a
+   value across a login/refresh boundary.
+3. Call `POST /auth/login` with `{ email, password }` and the CSRF header.
+   The response body is `{ user, csrfToken, expiresIn }` — no tokens.
+4. On app load, call `GET /auth/me` (cookie-authenticated, no CSRF header
+   needed — it's a GET) to check for an existing session without forcing a
+   refresh-token rotation. Returns `{ user, expiresAt }`.
+5. If a protected request returns `401`, call `POST /auth/refresh` (CSRF
+   header required, refresh cookie sent automatically) and retry the original
+   request once. Response shape matches login's.
+6. On refresh failure, clear local UI state and return to login (there is no
+   client-side token to clear — the cookies are cleared by the backend).
+
+Do not retry `403`, `404`, `409`, or `429` as authentication failures. A `403`
+from a CSRF mismatch looks the same status-wise as a permissions `403` — if a
+mutating request unexpectedly 403s, first check the `x-csrf-token` header is
+present and fresh before assuming a permissions issue.
 
 ### New authentication screens/actions
 
 | UI                  | Method and endpoint          | Body/headers                                                                  |
 | ------------------- | ---------------------------- | ----------------------------------------------------------------------------- |
-| Forgot password     | `POST /auth/forgot-password` | `{ "email": "user@example.com" }`                                             |
-| Reset password page | `POST /auth/reset-password`  | `{ "token": "token-from-url", "newPassword": "12+ characters" }`              |
-| Change password     | `POST /auth/change-password` | Bearer token; `{ "currentPassword": "...", "newPassword": "12+ characters" }` |
-| Logout              | `POST /auth/logout`          | Bearer token and `x-refresh-token`                                            |
-| Logout all devices  | `POST /auth/logout-all`      | Bearer token                                                                  |
+| Forgot password     | `POST /auth/forgot-password` | `{ "email": "user@example.com" }` + `x-csrf-token` (bootstrap via `GET /auth/csrf` on page load — no prior session exists here) |
+| Reset password page | `POST /auth/reset-password`  | `{ "token": "token-from-url", "newPassword": "12+ characters" }` + `x-csrf-token` (same bootstrap note) |
+| Change password     | `POST /auth/change-password` | Cookie session; `{ "currentPassword": "...", "newPassword": "12+ characters" }` + `x-csrf-token` |
+| Logout              | `POST /auth/logout`          | Cookie session + `x-csrf-token`                                               |
+| Logout all devices  | `POST /auth/logout-all`      | Cookie session + `x-csrf-token`                                               |
 
 Forgot-password always shows the same success message to prevent account discovery.
 Build a `/reset-password` frontend route that reads `token` from the URL query and
@@ -269,5 +288,7 @@ invalidate or refetch:
 - `GET /leads/reminders`
 - `GET /leads/dashboard`
 
-Keep access tokens in memory where possible. Avoid placing refresh tokens or reset
-tokens in logs, analytics events, or error-reporting payloads.
+Access and refresh tokens are httpOnly cookies and are never visible to
+frontend JavaScript — there is nothing to keep in memory or accidentally log.
+Avoid placing reset-password tokens (the `token` URL query param) in
+analytics events or error-reporting payloads.

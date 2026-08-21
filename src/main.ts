@@ -2,7 +2,16 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
+import type { Request } from 'express';
+import type { CorsOptions } from 'cors';
 import { AppModule } from './app.module';
+
+const PUBLIC_FORM_PATHS = new Set([
+  '/otp.php',
+  '/changeEmail.php',
+  '/finalsubmission.php',
+  '/contact.php',
+]);
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -10,10 +19,29 @@ async function bootstrap() {
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
 
   app.use(cookieParser());
-  app.enableCors({
-    origin: true,
-    credentials: true,
-  });
+  const allowedOrigins = (
+    process.env.CORS_ALLOWED_ORIGINS || 'http://localhost:3000'
+  )
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  app.enableCors(
+    (
+      request: Request,
+      callback: (error: Error | null, options?: CorsOptions) => void,
+    ) => {
+      const isPublicForm =
+        PUBLIC_FORM_PATHS.has(request.path) ||
+        request.path.startsWith('/public/forms/');
+      callback(null, {
+        // Public forms are embedded on other (legacy/marketing) sites and
+        // carry no cookies, so any origin may call them; everything else is
+        // the LMS app itself and is restricted + credentialed.
+        origin: isPublicForm ? true : allowedOrigins,
+        credentials: !isPublicForm,
+      });
+    },
+  );
 
   app.useGlobalPipes(
     new ValidationPipe({
