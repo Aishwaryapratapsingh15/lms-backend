@@ -1,5 +1,6 @@
 FROM node:24-alpine AS dependencies
 
+RUN apk add --no-cache openssl
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -14,6 +15,7 @@ RUN npm run build
 
 FROM node:24-alpine AS runner
 
+RUN apk add --no-cache openssl
 ENV NODE_ENV=production
 ENV PORT=4000
 WORKDIR /app
