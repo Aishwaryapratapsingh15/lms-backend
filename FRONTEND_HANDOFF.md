@@ -3,10 +3,11 @@
 Use the final API origin supplied for deployment:
 
 ```text
-https://<BACKEND_DOMAIN>
+https://leadflowapi.eicetechnology.com
 ```
 
-Swagger remains available at `https://<BACKEND_DOMAIN>/api/docs`.
+Swagger remains available at
+`https://leadflowapi.eicetechnology.com/api/docs`.
 
 ## Authentication contract
 

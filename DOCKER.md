@@ -1,168 +1,233 @@
-# Backend deployment: Linux VPS, Docker Compose, and Nginx
+# Production deployment runbook
 
-This repository deploys only the NestJS backend and PostgreSQL. The frontend is a
-separate application/repository and is not built or started by this Compose stack.
+This repository deploys the NestJS API and PostgreSQL with Docker Compose. The
+frontend is deployed separately.
 
-The stack uses one canonical Compose file: `compose.yaml`.
+Production URLs:
 
-## Runtime behavior
+- API: `https://leadflowapi.eicetechnology.com`
+- Swagger: `https://leadflowapi.eicetechnology.com/api/docs`
+- Frontend/CORS origin: `https://leadflow.eicetechnology.com`
 
-- `postgres` stores data in the persistent `postgres_data` Docker volume.
-- `backend` runs pending Prisma migrations and then starts NestJS.
-- The admin seed is an explicit backend command; normal startup never seeds data.
-- PostgreSQL has no host port, and the API binds only to `127.0.0.1:4010` for Nginx.
-- `FRONTEND_URL` is the separately deployed frontend URL used by backend CORS.
+The `deploy/nginx/` directory is intentionally ignored by Git. Configure Nginx
+directly on the server using the commands below.
 
-## 1. VPS prerequisites
+## 1. Point DNS to the server
 
-Use a supported 64-bit Ubuntu VPS. Point the API domain, for example
-`api.lms.example.com`, to the VPS public IP with a DNS `A` record.
+Create an `A` record for `leadflowapi.eicetechnology.com` pointing to the VPS
+public IP. Wait for it to resolve before requesting the HTTPS certificate.
 
-Install Git and Nginx:
+## 2. Install server requirements (first deployment only)
+
+Run on an Ubuntu VPS:
 
 ```bash
 sudo apt update
 sudo apt install -y git nginx
 ```
 
-Install Docker Engine and the Docker Compose plugin using Docker's official guides:
+Install Docker Engine and the Docker Compose plugin from Docker's Ubuntu guide:
 
 - https://docs.docker.com/engine/install/ubuntu/
 - https://docs.docker.com/compose/install/linux/
 
-Verify and enable the services:
+Then verify and enable the services:
 
 ```bash
-sudo systemctl enable --now docker nginx
 docker --version
 docker compose version
+sudo systemctl enable --now docker nginx
 ```
 
-Allow only SSH, HTTP, and HTTPS through the VPS firewall. Do not open ports `4010`
-or `5432` publicly.
+Allow SSH, HTTP, and HTTPS in the VPS firewall. Do not publicly open PostgreSQL
+port `5432` or backend port `4010`.
 
-## 2. Clone the backend
+## 3. Upload the backend code (first deployment only)
 
 ```bash
-sudo mkdir -p /opt/eice
-sudo chown "$USER":"$USER" /opt/eice
-cd /opt/eice
-git clone https://github.com/Aishwaryapratapsingh15/lms-backend.git
-cd lms-backend
+sudo mkdir -p /var/www/lms_backend
+sudo chown "$USER":"$USER" /var/www/lms_backend
+git clone https://github.com/Aishwaryapratapsingh15/lms-backend.git /var/www/lms_backend
+cd /var/www/lms_backend
 ```
 
-## 3. Copy the private environment file
+## 4. Upload and check the private `.env`
 
-Copy the prepared private `.env` from the trusted workstation into
-`/opt/eice/lms-backend/.env`, then protect it:
+The `.env` file is ignored by Git and must be uploaded separately. From the
+trusted local computer, run (replace `SERVER_USER` and `SERVER_IP`):
 
 ```bash
-cd /opt/eice/lms-backend
+scp .env SERVER_USER@SERVER_IP:/var/www/lms_backend/.env
+```
+
+Then run on the server:
+
+```bash
+cd /var/www/lms_backend
 chmod 600 .env
 ```
 
-The file already contains the PostgreSQL, Prisma, JWT, CORS, SMTP, OTP, recipient,
-and initial admin settings. Never commit or send `.env` through an insecure channel.
+Confirm these production settings without printing secret values:
 
-## 4. First deployment
+- `NODE_ENV=production`
+- `DATABASE_URL` uses host `postgres` and database port `5432`
+- `FRONTEND_URL=https://leadflow.eicetechnology.com`
+- `PASSWORD_RESET_URL=https://leadflow.eicetechnology.com/reset-password`
+- `COOKIE_SECURE=true`
+- PostgreSQL, JWT, SMTP, OTP, recipient, and initial admin variables are set
+
+No `BACKEND_URL` environment variable is required. Nginx owns the public API
+domain, while `FRONTEND_URL` is the allowed browser origin.
+
+Never commit `.env` or paste its secrets into deployment logs or documentation.
+
+## 5. Start the database and backend
 
 ```bash
+cd /var/www/lms_backend
 docker compose config --quiet
 docker compose up -d --build
 docker compose ps
 docker compose logs --tail=100 backend postgres
 ```
 
-The backend waits for a healthy PostgreSQL container, runs `prisma migrate deploy`,
-and starts only if migrations succeed.
+Backend startup automatically runs `npx prisma migrate deploy` before starting
+NestJS. All committed, pending migrations are therefore applied to the production
+database. Startup stops if a migration fails.
 
-## 5. Create the first Super Admin once
+## 6. Create the first Super Admin once
+
+Run this only during the first deployment:
 
 ```bash
+cd /var/www/lms_backend
 docker compose run --rm backend node dist/scripts/seed-admin.js
 ```
 
-This creates one `SUPER_ADMIN` from `INITIAL_ADMIN_*`. If the email already exists,
-the command changes nothing. Do not run this during routine deployments.
+The command creates the user configured by `INITIAL_ADMIN_*`. It is safe against
+duplicates: if `INITIAL_ADMIN_EMAIL` already exists, it reports that no data was
+changed. Normal backend startup and future `git pull` deployments do **not** run
+this seed command.
 
-After confirming the admin can log in, remove `INITIAL_ADMIN_PASSWORD` from `.env`
-and keep the password in a password manager. Backend startup does not require it.
+After login is confirmed, remove `INITIAL_ADMIN_PASSWORD` from `.env` and keep the
+password in a password manager. The running API does not need this variable.
 
-## 6. Configure Nginx
+## 7. Configure Nginx
 
-Replace `api.lms.example.com` in `deploy/nginx/lms.conf`, then enable it:
+Create the server configuration directly on the VPS:
 
 ```bash
-sudo cp deploy/nginx/lms.conf /etc/nginx/sites-available/eice-lms-api
-sudo ln -s /etc/nginx/sites-available/eice-lms-api /etc/nginx/sites-enabled/eice-lms-api
+sudo tee /etc/nginx/sites-available/leadflowapi.eicetechnology.com >/dev/null <<'NGINX'
+server {
+    listen 80;
+    listen [::]:80;
+    server_name leadflowapi.eicetechnology.com;
+
+    client_max_body_size 10m;
+
+    location / {
+        proxy_pass http://127.0.0.1:4010;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+NGINX
+
+sudo ln -sfn /etc/nginx/sites-available/leadflowapi.eicetechnology.com /etc/nginx/sites-enabled/leadflowapi.eicetechnology.com
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-The Nginx host proxies the public API domain to `127.0.0.1:4010`. Do not reload
-Nginx unless `sudo nginx -t` succeeds.
+Never reload Nginx unless `sudo nginx -t` succeeds.
 
-## 7. Enable HTTPS
+## 8. Enable HTTPS
 
-After DNS resolves and the HTTP API domain works, install Certbot using the current
-instructions at https://certbot.eff.org/ and select Nginx with the VPS OS. Then run:
+After DNS resolves and HTTP works, install Certbot using the current instructions
+at https://certbot.eff.org/ for Ubuntu and Nginx. Then run:
 
 ```bash
-sudo certbot --nginx -d api.lms.example.com
+sudo certbot --nginx -d leadflowapi.eicetechnology.com
 sudo certbot renew --dry-run
 ```
 
-Use the real API domain in place of the example.
-
-## 8. Every later deployment
+## 9. Verify the first deployment
 
 ```bash
-cd /opt/eice/lms-backend
+curl -I https://leadflowapi.eicetechnology.com/api/docs
+docker compose ps
+docker compose logs --tail=100 backend postgres
+```
+
+## 10. Deploy every later code update
+
+Run these commands after new code is pushed to Git:
+
+```bash
+cd /var/www/lms_backend
 git pull --ff-only
 docker compose config --quiet
 docker compose up -d --build --remove-orphans
 docker compose ps
 docker compose logs --tail=100 backend postgres
+curl -I https://leadflowapi.eicetechnology.com/api/docs
 ```
 
-Do not run the admin seed command. Pending migrations apply automatically, while
-existing users, passwords, leads, and form submissions remain unchanged in PostgreSQL.
+Do not run the admin seed again. `docker compose up` rebuilds the API and applies
+pending Prisma migrations automatically; it preserves the PostgreSQL Docker volume
+and all existing records.
 
-## 9. Common operations
+## 11. Add a table or change the database schema in the future
 
-Follow logs:
+Create migrations during development, never directly on production:
+
+1. Update `prisma/schema.prisma` with the new table, column, index, or relation.
+2. Against the development database, generate and test a migration:
+
+   ```bash
+   npx prisma migrate dev --name add_descriptive_table_name
+   npm run build
+   ```
+
+3. Review and commit both `prisma/schema.prisma` and the generated
+   `prisma/migrations/<timestamp>_<name>/migration.sql` directory.
+4. Push the commit and back up production before deploying a risky schema change:
+
+   ```bash
+   cd /var/www/lms_backend
+   docker compose exec -T postgres pg_dump -U lms_user -d lms_db > "lms_db_$(date +%F_%H%M%S).sql"
+   ```
+
+5. Run the normal later-deployment commands from section 10. The rebuilt backend
+   runs `prisma migrate deploy` and applies only migrations not already recorded in
+   the production `_prisma_migrations` table.
+
+Never use `prisma migrate dev` or `prisma db push` against production. Prisma
+migrations are not automatically rolled back, so review destructive SQL and keep a
+fresh backup before dropping or renaming columns/tables.
+
+To inspect migration state on production:
 
 ```bash
+docker compose run --rm backend npx prisma migrate status
+```
+
+## 12. Common operations
+
+```bash
+# Follow logs
 docker compose logs -f backend postgres
-```
 
-Restart only the API without reseeding:
-
-```bash
+# Restart only the API
 docker compose restart backend
-```
 
-Back up PostgreSQL:
+# Back up PostgreSQL
+docker compose exec -T postgres pg_dump -U lms_user -d lms_db > "lms_db_$(date +%F_%H%M%S).sql"
 
-```bash
-docker compose exec -T postgres pg_dump -U lms_user -d lms_db > lms_db_backup.sql
-```
-
-Stop containers while preserving the database volume:
-
-```bash
+# Stop containers but preserve database data
 docker compose down
 ```
 
 Never run `docker compose down -v` unless permanent database deletion is intended.
-
-## 10. Verify the deployment
-
-```bash
-curl -I https://api.lms.example.com/api/docs
-docker compose ps
-```
-
-If the backend restarts repeatedly, inspect `docker compose logs backend`. Invalid
-database credentials, unavailable PostgreSQL, or a failed migration prevents the API
-from starting against an outdated schema.
