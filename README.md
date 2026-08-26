@@ -30,6 +30,8 @@ roles, and error handling are documented in `FRONTEND_HANDOFF.md`.
 - Follow-up logging
 - Lead status tracking
 - Email logging and trigger endpoint
+- Outlook Calendar sync for follow-ups (Microsoft Graph, app-only)
+- Microsoft Teams notification (Adaptive Card) on every new lead
 - Swagger API docs for frontend integration
 
 ## Project Structure
@@ -38,6 +40,8 @@ roles, and error handling are documented in `FRONTEND_HANDOFF.md`.
 - src/users - user management
 - src/leads - lead lifecycle APIs
 - src/email - email trigger and tracking
+- src/calendar - Outlook Calendar sync for follow-ups (Microsoft Graph)
+- src/notifications - Microsoft Teams webhook notification on new leads
 - src/common - guards and shared decorators
 - prisma/schema.prisma - database schema
 
@@ -313,5 +317,7 @@ Body:
 - SMTP is configured using environment variables in `.env`.
 - When credentials are present, emails are truly sent and logged.
 - If SMTP is not configured, the email still records in the database without crashing the app.
+- Follow-ups with a `nextFollowUpAt` are pushed to the assigned user's Outlook calendar via Microsoft Graph (app-only credentials, see `DOCKER.md` section 12) and removed again on completion. If `MS_GRAPH_TENANT_ID`/`MS_GRAPH_CLIENT_ID`/`MS_GRAPH_CLIENT_SECRET` are not configured, the follow-up still saves normally, just without a calendar event.
+- Every new lead (from `POST /leads` or the public contact form) posts an Adaptive Card to a Microsoft Teams channel via `TEAMS_LEAD_WEBHOOK_URL` (see `DOCKER.md` section 13). If unset, lead creation is unaffected — the notification is just skipped.
 - Frontend must send every request with credentials included and echo the `csrf_token` cookie back as `x-csrf-token` on every mutating request (see Authentication Flow above) — this now applies to the whole API, not just login/refresh.
 - New env vars: `NODE_ENV` (drives the `secure` cookie flag), `COOKIE_DOMAIN` (e.g. `.eicetechnology.com` in production, unset in local dev), `CORS_ALLOWED_ORIGINS` (comma-separated allowlist, replaces the old permissive CORS setting).

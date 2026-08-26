@@ -76,6 +76,8 @@ Confirm these production settings without printing secret values:
 - `CORS_ALLOWED_ORIGINS=https://leadflow.eicetechnology.com` (comma-separated if more than one origin needs access; required — the container will fail to start without it). This only restricts the LMS app's own endpoints — `/public/forms/*` and the legacy `.php` aliases (`otp.php`, `contact.php`, etc.) remain open to any origin, since those are embedded on other public-facing sites and never carry cookies.
 - `COOKIE_DOMAIN=.eicetechnology.com` (shares the `access_token`/`refresh_token`/`csrf_token` cookies across the `leadflow.` and `leadflowapi.` subdomains; leave unset for local development)
 - PostgreSQL, JWT, SMTP, OTP, recipient, and initial admin variables are set
+- `MS_GRAPH_TENANT_ID`, `MS_GRAPH_CLIENT_ID`, `MS_GRAPH_CLIENT_SECRET` are set if Outlook Calendar sync is enabled (see "Calendar sync" below) — optional, follow-ups still work without them, just without a calendar event
+- `TEAMS_LEAD_WEBHOOK_URL` is set if new-lead Teams notifications are enabled (see "Teams lead notifications" below) — optional, lead creation still works without it
 
 No `BACKEND_URL` environment variable is required. Nginx owns the public API
 domain, while `FRONTEND_URL` is the allowed browser origin.
@@ -215,7 +217,89 @@ To inspect migration state on production:
 docker compose run --rm backend npx prisma migrate status
 ```
 
-## 12. Common operations
+## 12. Calendar sync (Outlook / Microsoft Graph)
+
+Every lead follow-up with a "next follow-up" date/time is pushed as an event
+onto the assigned salesperson's own Outlook calendar, and removed again when
+the follow-up is marked complete. This uses **app-only** Microsoft Graph
+credentials (client-credentials flow) instead of asking each user to sign in
+and connect their calendar individually — appropriate here since the whole
+company already sits on one Microsoft 365 tenant.
+
+One-time setup by a Microsoft 365/Azure (Entra ID) admin:
+
+1. In the [Azure Portal](https://portal.azure.com), go to **Entra ID → App
+   registrations → New registration**. Any name (e.g. "EICE LMS Calendar
+   Sync") and the default "single tenant" option are fine — no redirect URI
+   is needed, since this app never signs a user in interactively.
+2. Open the new app → **API permissions → Add a permission → Microsoft Graph
+   → Application permissions** → select `Calendars.ReadWrite` → Add.
+3. Still on **API permissions**, click **Grant admin consent for
+   <tenant>** — this is the step that lets the app act on *any* mailbox in
+   the tenant without a per-user login. Only a Global Admin or Privileged
+   Role Admin can click this.
+4. Open **Certificates & secrets → New client secret**, copy the generated
+   value immediately (it is not shown again).
+5. Note three values: the **Directory (tenant) ID** and **Application
+   (client) ID** from the app's Overview page, and the **client secret**
+   value from step 4.
+6. Add them to the server's `.env`:
+
+   ```env
+   MS_GRAPH_TENANT_ID=<directory-tenant-id>
+   MS_GRAPH_CLIENT_ID=<application-client-id>
+   MS_GRAPH_CLIENT_SECRET=<client-secret-value>
+   ```
+
+7. Restart the backend (`docker compose restart backend`, or redeploy per
+   section 10). No database migration is required beyond the one already
+   committed with this feature (`add_calendar_sync`).
+
+If these three variables are absent, follow-up creation/completion behaves
+exactly as before — the calendar event is silently skipped, matching the
+unconfigured-SMTP behavior for email. Sync failures (e.g. a wrong secret, or
+an assigned user's mailbox not existing) are logged and recorded on the
+follow-up row (`calendarSyncError`) rather than failing the request.
+
+Rotate the client secret before its expiry (Azure secrets expire after at
+most 24 months) — set a calendar reminder for this outside the app itself.
+
+## 13. Teams lead notifications
+
+Every time a new lead is created — whether from the admin/sales UI (`POST
+/leads`) or from the public website's "Request a Demo" form
+(`/public/forms/contact`) — an Adaptive Card is posted to a Microsoft Teams
+channel via a Teams **Workflow** webhook (the built-in "Post to a channel
+when a webhook request is received" template, not the deprecated Office 365
+Incoming Webhook connector).
+
+Setup:
+
+1. In the target Teams channel, open **Workflows** and add "Post to a
+   channel when a webhook request is received". Finish the wizard and copy
+   the generated HTTP POST URL.
+2. Add it to the server's `.env`:
+
+   ```env
+   TEAMS_LEAD_WEBHOOK_URL=<the workflow's webhook URL>
+   ```
+
+3. Restart the backend. No database migration is needed for this feature.
+
+The backend POSTs the standard Teams message envelope (`{"type":"message",
+"attachments":[{"contentType":"application/vnd.microsoft.card.adaptive",
+"content": <Adaptive Card 1.4 JSON>}]}`) with the lead's name, company,
+email, phone, source, assignee, and an "Open in LMS" button linking to
+`FRONTEND_URL`. If your workflow's trigger schema was built from a
+different sample payload than the template default, the card may not
+render — check the flow's trigger schema and adjust
+`src/notifications/teams-notification.service.ts` to match.
+
+If `TEAMS_LEAD_WEBHOOK_URL` is absent, lead creation behaves exactly as
+before — the notification is silently skipped. A failed post (bad URL,
+Teams outage) is logged and never fails the lead-creation request.
+
+## 14. Common operations
 
 ```bash
 # Follow logs

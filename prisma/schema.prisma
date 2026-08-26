@@ -140,16 +140,18 @@ model Lead {
 }
 
 model LeadFollowUp {
-  id             String       @id @default(uuid())
-  leadId         String
-  userId         String
-  type           FollowUpType @default(CALL)
-  notes          String
-  nextFollowUpAt DateTime?
-  completedAt    DateTime?
-  createdAt      DateTime     @default(now())
-  lead           Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String       @id @default(uuid())
+  leadId            String
+  userId            String
+  type              FollowUpType @default(CALL)
+  notes             String
+  nextFollowUpAt    DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime     @default(now())
+  calendarEventId   String?
+  calendarSyncError String?
+  lead              Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([nextFollowUpAt, completedAt])
 }

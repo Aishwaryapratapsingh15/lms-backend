@@ -208,6 +208,14 @@ PATCH /leads/follow-ups/:followUpId/complete
 Display lead identity, assigned salesperson, reminder time, type, notes, and overdue
 duration. Refresh reminder/dashboard queries after completion.
 
+Every follow-up with a `nextFollowUpAt` is also pushed to the assigned user's
+Outlook calendar (Microsoft Graph, backend-only — no frontend action needed).
+The follow-up object gains two fields worth surfacing if useful:
+`calendarEventId` (non-null once synced) and `calendarSyncError` (a short
+string if the push failed, e.g. Graph credentials misconfigured — the
+follow-up itself always saves regardless). No UI is required for v1; a small
+"📅 synced" / "sync failed" badge is a natural future addition.
+
 ### 5. Dashboard
 
 ```http

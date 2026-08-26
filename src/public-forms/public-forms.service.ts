@@ -10,12 +10,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ContactSubmissionDto } from './dto/contact-submission.dto';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { SubmitPublicFormDto } from './dto/submit-public-form.dto';
+import { TeamsNotificationService } from '../notifications/teams-notification.service';
 
 @Injectable()
 export class PublicFormsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly teamsNotifications: TeamsNotificationService,
   ) {}
 
   async sendOtp(dto: SendOtpDto) {
@@ -133,7 +135,7 @@ export class PublicFormsService {
 
   async submitContact(dto: ContactSubmissionDto) {
     const email = dto.email.trim().toLowerCase();
-    const submission = await this.prisma.$transaction(async (tx) => {
+    const { submission, lead } = await this.prisma.$transaction(async (tx) => {
       const created = await tx.contactSubmission.create({
         data: {
           name: dto.name.trim(),
@@ -149,7 +151,7 @@ export class PublicFormsService {
           message: this.optional(dto.message),
         },
       });
-      await tx.lead.create({
+      const leadRecord = await tx.lead.create({
         data: {
           fullName: dto.name.trim(),
           email,
@@ -167,7 +169,17 @@ export class PublicFormsService {
           ]),
         },
       });
-      return created;
+      return { submission: created, lead: leadRecord };
+    });
+
+    await this.teamsNotifications.notifyNewLead({
+      id: lead.id,
+      fullName: lead.fullName,
+      company: lead.company,
+      email: lead.email,
+      phone: lead.phone,
+      source: lead.source,
+      assignedToName: null,
     });
 
     try {

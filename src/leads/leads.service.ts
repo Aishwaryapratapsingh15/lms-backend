@@ -13,10 +13,19 @@ import {
   Role,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CalendarService } from '../calendar/calendar.service';
+import { TeamsNotificationService } from '../notifications/teams-notification.service';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
 import { ListLeadsQueryDto } from './dto/list-leads-query.dto';
 import { RemindersQueryDto } from './dto/reminders-query.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
+
+const FOLLOW_UP_TYPE_LABELS: Record<string, string> = {
+  CALL: 'Call',
+  EMAIL: 'Email',
+  MEETING: 'Meeting',
+  NOTE: 'Note',
+};
 
 type Actor = { id: string; role: Role };
 
@@ -27,7 +36,11 @@ const leadRelations = {
 
 @Injectable()
 export class LeadsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly calendar: CalendarService,
+    private readonly teamsNotifications: TeamsNotificationService,
+  ) {}
 
   private accessScope(actor: Actor): Prisma.LeadWhereInput {
     return actor.role === Role.SALES ? { assignedToId: actor.id } : {};
@@ -92,8 +105,8 @@ export class LeadsService {
 
     if (data.assignedToId) await this.assertActiveSalesUser(data.assignedToId);
 
-    return this.prisma.$transaction(async (tx) => {
-      const lead = await tx.lead.create({
+    const lead = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.lead.create({
         data: {
           ...data,
           source: data.source ?? LeadSource.WEBSITE,
@@ -104,13 +117,24 @@ export class LeadsService {
         include: leadRelations,
       });
       await tx.leadActivity.create({
-        data: this.activity(lead.id, actor.id, LeadActivityType.CREATED, {
-          status: lead.status,
-          assignedToId: lead.assignedToId,
+        data: this.activity(created.id, actor.id, LeadActivityType.CREATED, {
+          status: created.status,
+          assignedToId: created.assignedToId,
         }),
       });
-      return lead;
+      return created;
     });
+
+    await this.teamsNotifications.notifyNewLead({
+      id: lead.id,
+      fullName: lead.fullName,
+      company: lead.company,
+      email: lead.email,
+      phone: lead.phone,
+      source: lead.source,
+      assignedToName: lead.assignedTo?.name ?? null,
+    });
+    return lead;
   }
 
   async findAll(query: ListLeadsQueryDto, actor: Actor) {
@@ -272,8 +296,8 @@ export class LeadsService {
   ) {
     const lead = await this.accessibleLead(data.leadId, actor);
     this.assertActiveLead(lead);
-    return this.prisma.$transaction(async (tx) => {
-      const followUp = await tx.leadFollowUp.create({
+    const followUp = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.leadFollowUp.create({
         data: {
           ...data,
           userId: actor.id,
@@ -283,10 +307,10 @@ export class LeadsService {
         },
         include: { user: { select: { id: true, name: true, email: true } } },
       });
-      if (followUp.nextFollowUpAt) {
+      if (created.nextFollowUpAt) {
         await tx.lead.update({
           where: { id: data.leadId },
-          data: { nextFollowUpAt: followUp.nextFollowUpAt },
+          data: { nextFollowUpAt: created.nextFollowUpAt },
         });
       }
       await tx.leadActivity.create({
@@ -295,24 +319,51 @@ export class LeadsService {
           actor.id,
           LeadActivityType.FOLLOW_UP_ADDED,
           {
-            followUpId: followUp.id,
-            type: followUp.type,
-            nextFollowUpAt: followUp.nextFollowUpAt?.toISOString() ?? null,
+            followUpId: created.id,
+            type: created.type,
+            nextFollowUpAt: created.nextFollowUpAt?.toISOString() ?? null,
           },
         ),
       });
-      return followUp;
+      return created;
     });
+
+    // Calendar sync happens outside the DB transaction (it's a network call
+    // to Microsoft Graph) and must never fail the follow-up itself — same
+    // graceful-degradation contract as unconfigured SMTP for email sending.
+    // CalendarService already swallows its own errors, but this try/catch
+    // also covers the follow-up record update below.
+    if (followUp.nextFollowUpAt) {
+      try {
+        const { eventId, error } = await this.calendar.createFollowUpEvent({
+          userEmail: followUp.user.email,
+          subject: `${FOLLOW_UP_TYPE_LABELS[followUp.type] ?? followUp.type}: ${lead.fullName}${lead.company ? ` (${lead.company})` : ''}`,
+          body: `${FOLLOW_UP_TYPE_LABELS[followUp.type] ?? followUp.type} follow-up for ${lead.fullName}.\n\nNotes: ${followUp.notes}`,
+          start: followUp.nextFollowUpAt,
+        });
+        await this.prisma.leadFollowUp.update({
+          where: { id: followUp.id },
+          data: { calendarEventId: eventId, calendarSyncError: error },
+        });
+        followUp.calendarEventId = eventId;
+        followUp.calendarSyncError = error;
+      } catch {
+        // Already logged inside CalendarService; the follow-up itself is
+        // already saved, so nothing further to do here.
+      }
+    }
+    return followUp;
   }
 
   async completeFollowUp(id: string, actor: Actor) {
     const followUp = await this.prisma.leadFollowUp.findUnique({
       where: { id },
+      include: { user: { select: { email: true } } },
     });
     if (!followUp) throw new NotFoundException('Follow-up not found');
     await this.accessibleLead(followUp.leadId, actor);
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.leadFollowUp.update({
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.leadFollowUp.update({
         where: { id },
         data: { completedAt: new Date() },
       });
@@ -326,8 +377,25 @@ export class LeadsService {
           },
         ),
       });
-      return updated;
+      return result;
     });
+
+    if (followUp.calendarEventId) {
+      try {
+        await this.calendar.deleteEvent(
+          followUp.user.email,
+          followUp.calendarEventId,
+        );
+        await this.prisma.leadFollowUp.update({
+          where: { id },
+          data: { calendarEventId: null },
+        });
+      } catch {
+        // Already logged inside CalendarService; completion itself already
+        // succeeded, so nothing further to do here.
+      }
+    }
+    return updated;
   }
 
   async reminders(query: RemindersQueryDto, actor: Actor) {
