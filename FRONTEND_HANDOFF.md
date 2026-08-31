@@ -210,11 +210,15 @@ duration. Refresh reminder/dashboard queries after completion.
 
 Every follow-up with a `nextFollowUpAt` is also pushed to the assigned user's
 Outlook calendar (Microsoft Graph, backend-only — no frontend action needed).
-The follow-up object gains two fields worth surfacing if useful:
-`calendarEventId` (non-null once synced) and `calendarSyncError` (a short
+The follow-up object gains fields worth surfacing:
+`calendarEventId` (non-null once synced), `calendarSyncError` (a short
 string if the push failed, e.g. Graph credentials misconfigured — the
-follow-up itself always saves regardless). No UI is required for v1; a small
-"📅 synced" / "sync failed" badge is a natural future addition.
+follow-up itself always saves regardless), and — for `type: "MEETING"`
+follow-ups only — `teamsJoinUrl`, a Teams meeting link the assigned user (and
+anyone else you choose to show it to) can click to join. Render it as a
+"🎥 Join Teams Meeting" link when present and the follow-up isn't completed
+yet; it is cleared back to `null` once the follow-up is marked complete
+(the calendar event is deleted at that point too).
 
 ### 5. Dashboard
 

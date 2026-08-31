@@ -335,18 +335,28 @@ export class LeadsService {
     // also covers the follow-up record update below.
     if (followUp.nextFollowUpAt) {
       try {
-        const { eventId, error } = await this.calendar.createFollowUpEvent({
-          userEmail: followUp.user.email,
-          subject: `${FOLLOW_UP_TYPE_LABELS[followUp.type] ?? followUp.type}: ${lead.fullName}${lead.company ? ` (${lead.company})` : ''}`,
-          body: `${FOLLOW_UP_TYPE_LABELS[followUp.type] ?? followUp.type} follow-up for ${lead.fullName}.\n\nNotes: ${followUp.notes}`,
-          start: followUp.nextFollowUpAt,
-        });
+        const isMeeting = followUp.type === 'MEETING';
+        const { eventId, joinUrl, error } =
+          await this.calendar.createFollowUpEvent({
+            userEmail: followUp.user.email,
+            subject: `${FOLLOW_UP_TYPE_LABELS[followUp.type] ?? followUp.type}: ${lead.fullName}${lead.company ? ` (${lead.company})` : ''}`,
+            body: `${FOLLOW_UP_TYPE_LABELS[followUp.type] ?? followUp.type} follow-up for ${lead.fullName}.\n\nNotes: ${followUp.notes}`,
+            start: followUp.nextFollowUpAt,
+            // Only meetings get an actual Teams video link; a plain call or
+            // note reminder doesn't need one.
+            isOnlineMeeting: isMeeting,
+          });
         await this.prisma.leadFollowUp.update({
           where: { id: followUp.id },
-          data: { calendarEventId: eventId, calendarSyncError: error },
+          data: {
+            calendarEventId: eventId,
+            calendarSyncError: error,
+            teamsJoinUrl: isMeeting ? joinUrl : null,
+          },
         });
         followUp.calendarEventId = eventId;
         followUp.calendarSyncError = error;
+        followUp.teamsJoinUrl = isMeeting ? joinUrl : null;
       } catch {
         // Already logged inside CalendarService; the follow-up itself is
         // already saved, so nothing further to do here.
@@ -388,7 +398,7 @@ export class LeadsService {
         );
         await this.prisma.leadFollowUp.update({
           where: { id },
-          data: { calendarEventId: null },
+          data: { calendarEventId: null, teamsJoinUrl: null },
         });
       } catch {
         // Already logged inside CalendarService; completion itself already

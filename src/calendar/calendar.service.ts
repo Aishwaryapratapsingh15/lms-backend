@@ -7,9 +7,14 @@ type FollowUpEventInput = {
   body: string;
   start: Date;
   durationMinutes?: number;
+  isOnlineMeeting?: boolean;
 };
 
-type SyncResult = { eventId: string | null; error: string | null };
+type SyncResult = {
+  eventId: string | null;
+  joinUrl: string | null;
+  error: string | null;
+};
 
 @Injectable()
 export class CalendarService {
@@ -79,11 +84,12 @@ export class CalendarService {
   }
 
   async createFollowUpEvent(input: FollowUpEventInput): Promise<SyncResult> {
-    if (!this.isConfigured()) return { eventId: null, error: null };
+    if (!this.isConfigured()) return { eventId: null, joinUrl: null, error: null };
     const token = await this.getAccessToken();
     if (!token)
       return {
         eventId: null,
+        joinUrl: null,
         error: 'Could not authenticate with Microsoft Graph',
       };
 
@@ -107,6 +113,12 @@ export class CalendarService {
             end: { dateTime: this.toGraphDateTime(end), timeZone: 'UTC' },
             isReminderOn: true,
             reminderMinutesBeforeStart: 30,
+            // Asking Graph for a Teams meeting here (rather than calling the
+            // separate /onlineMeetings endpoint) attaches the join link
+            // directly onto this same calendar event/invite.
+            ...(input.isOnlineMeeting
+              ? { isOnlineMeeting: true, onlineMeetingProvider: 'teamsForBusiness' }
+              : {}),
           }),
         },
       );
@@ -115,16 +127,27 @@ export class CalendarService {
         this.logger.warn(
           `Graph event creation failed for ${input.userEmail}: ${res.status} ${errText}`,
         );
-        return { eventId: null, error: `Graph API error ${res.status}` };
+        return {
+          eventId: null,
+          joinUrl: null,
+          error: `Graph API error ${res.status}`,
+        };
       }
-      const created = (await res.json()) as { id: string };
-      return { eventId: created.id, error: null };
+      const created = (await res.json()) as {
+        id: string;
+        onlineMeeting?: { joinUrl?: string } | null;
+      };
+      return {
+        eventId: created.id,
+        joinUrl: created.onlineMeeting?.joinUrl ?? null,
+        error: null,
+      };
     } catch (err) {
       this.logger.error(
         `Graph event creation threw for ${input.userEmail}`,
         err as Error,
       );
-      return { eventId: null, error: (err as Error).message };
+      return { eventId: null, joinUrl: null, error: (err as Error).message };
     }
   }
 

@@ -217,11 +217,14 @@ To inspect migration state on production:
 docker compose run --rm backend npx prisma migrate status
 ```
 
-## 12. Calendar sync (Outlook / Microsoft Graph)
+## 12. Calendar sync (Outlook / Microsoft Graph) and Teams meetings
 
 Every lead follow-up with a "next follow-up" date/time is pushed as an event
 onto the assigned salesperson's own Outlook calendar, and removed again when
-the follow-up is marked complete. This uses **app-only** Microsoft Graph
+the follow-up is marked complete. Follow-ups of type **MEETING** additionally
+get a real Teams online-meeting link attached to that event (returned as
+`teamsJoinUrl` on the follow-up) — Call/Email/Note follow-ups get a plain
+calendar entry with no video link. This uses **app-only** Microsoft Graph
 credentials (client-credentials flow) instead of asking each user to sign in
 and connect their calendar individually — appropriate here since the whole
 company already sits on one Microsoft 365 tenant.
@@ -233,7 +236,11 @@ One-time setup by a Microsoft 365/Azure (Entra ID) admin:
    Sync") and the default "single tenant" option are fine — no redirect URI
    is needed, since this app never signs a user in interactively.
 2. Open the new app → **API permissions → Add a permission → Microsoft Graph
-   → Application permissions** → select `Calendars.ReadWrite` → Add.
+   → Application permissions** → select both `Calendars.ReadWrite` and
+   `OnlineMeetings.ReadWrite.All` → Add. The second permission is required
+   specifically for the Teams meeting link on MEETING-type follow-ups —
+   without it, Graph will still create the calendar event but silently
+   drop the online-meeting/join-link portion.
 3. Still on **API permissions**, click **Grant admin consent for
    <tenant>** — this is the step that lets the app act on *any* mailbox in
    the tenant without a per-user login. Only a Global Admin or Privileged

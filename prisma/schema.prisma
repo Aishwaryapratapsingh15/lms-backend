@@ -150,6 +150,7 @@ model LeadFollowUp {
   createdAt         DateTime     @default(now())
   calendarEventId   String?
   calendarSyncError String?
+  teamsJoinUrl      String?
   lead              Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
   user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
