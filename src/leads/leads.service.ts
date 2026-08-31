@@ -15,6 +15,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CalendarService } from '../calendar/calendar.service';
 import { TeamsNotificationService } from '../notifications/teams-notification.service';
+import { CalendarQueryDto } from './dto/calendar-query.dto';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
 import { ListLeadsQueryDto } from './dto/list-leads-query.dto';
 import { RemindersQueryDto } from './dto/reminders-query.dto';
@@ -435,6 +436,28 @@ export class LeadsService {
       },
       orderBy: { nextFollowUpAt: 'asc' },
       take: query.limit,
+    });
+  }
+
+  // Powers the calendar-grid view: unlike reminders() this returns every
+  // follow-up in the visible window regardless of completion status, so a
+  // day that already happened still shows what was scheduled on it.
+  async calendarEvents(query: CalendarQueryDto, actor: Actor) {
+    return this.prisma.leadFollowUp.findMany({
+      where: {
+        nextFollowUpAt: { gte: new Date(query.from), lt: new Date(query.to) },
+        lead: this.accessScope(actor),
+      },
+      include: {
+        lead: {
+          include: {
+            assignedTo: { select: { id: true, name: true, email: true } },
+          },
+        },
+        user: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { nextFollowUpAt: 'asc' },
+      take: 1000,
     });
   }
 

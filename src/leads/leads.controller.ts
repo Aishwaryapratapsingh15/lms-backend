@@ -19,6 +19,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RequestWithUser } from '../common/interfaces/request-with-user.interface';
+import { CalendarQueryDto } from './dto/calendar-query.dto';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
 import { ListLeadsQueryDto } from './dto/list-leads-query.dto';
 import { RemindersQueryDto } from './dto/reminders-query.dto';
@@ -55,6 +56,19 @@ export class LeadsController {
   })
   reminders(@Query() query: RemindersQueryDto, @Req() req: RequestWithUser) {
     return this.leadsService.reminders(query, req.user);
+  }
+
+  @Get('calendar')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'SALES')
+  @ApiOperation({
+    summary:
+      'List follow-ups/meetings with a nextFollowUpAt inside [from, to) for a calendar view',
+  })
+  calendarEvents(
+    @Query() query: CalendarQueryDto,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.leadsService.calendarEvents(query, req.user);
   }
 
   @Get()
