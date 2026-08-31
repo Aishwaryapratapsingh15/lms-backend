@@ -151,6 +151,12 @@ model LeadFollowUp {
   calendarEventId   String?
   calendarSyncError String?
   teamsJoinUrl      String?
+  // Mailbox the calendar event actually lives in — the lead's assigned
+  // salesperson at creation time, not necessarily this follow-up's creator
+  // (an Admin/SuperAdmin can log a follow-up on someone else's lead).
+  // Recorded separately from userId so completion can delete the right
+  // event even if the lead gets reassigned afterward.
+  calendarMailbox   String?
   lead              Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
   user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 

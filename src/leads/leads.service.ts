@@ -336,10 +336,22 @@ export class LeadsService {
     // also covers the follow-up record update below.
     if (followUp.nextFollowUpAt) {
       try {
+        // The event belongs on the LEAD'S assigned salesperson's calendar,
+        // not the follow-up creator's — an Admin/SuperAdmin can log a
+        // follow-up on a lead assigned to someone else. Fall back to the
+        // creator only when the lead has nobody assigned yet.
+        const assignedUser = lead.assignedToId
+          ? await this.prisma.user.findUnique({
+              where: { id: lead.assignedToId },
+              select: { email: true },
+            })
+          : null;
+        const calendarMailbox = assignedUser?.email ?? followUp.user.email;
+
         const isMeeting = followUp.type === 'MEETING';
         const { eventId, joinUrl, error } =
           await this.calendar.createFollowUpEvent({
-            userEmail: followUp.user.email,
+            userEmail: calendarMailbox,
             subject: `${FOLLOW_UP_TYPE_LABELS[followUp.type] ?? followUp.type}: ${lead.fullName}${lead.company ? ` (${lead.company})` : ''}`,
             body: `${FOLLOW_UP_TYPE_LABELS[followUp.type] ?? followUp.type} follow-up for ${lead.fullName}.\n\nNotes: ${followUp.notes}`,
             start: followUp.nextFollowUpAt,
@@ -350,6 +362,7 @@ export class LeadsService {
         await this.prisma.leadFollowUp.update({
           where: { id: followUp.id },
           data: {
+            calendarMailbox,
             calendarEventId: eventId,
             calendarSyncError: error,
             teamsJoinUrl: isMeeting ? joinUrl : null,
@@ -394,7 +407,7 @@ export class LeadsService {
     if (followUp.calendarEventId) {
       try {
         await this.calendar.deleteEvent(
-          followUp.user.email,
+          followUp.calendarMailbox ?? followUp.user.email,
           followUp.calendarEventId,
         );
         await this.prisma.leadFollowUp.update({
