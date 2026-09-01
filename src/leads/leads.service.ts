@@ -15,6 +15,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CalendarService } from '../calendar/calendar.service';
 import { TeamsNotificationService } from '../notifications/teams-notification.service';
+import { EmailService } from '../email/email.service';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
 import { ListLeadsQueryDto } from './dto/list-leads-query.dto';
@@ -41,6 +42,7 @@ export class LeadsService {
     private readonly prisma: PrismaService,
     private readonly calendar: CalendarService,
     private readonly teamsNotifications: TeamsNotificationService,
+    private readonly email: EmailService,
   ) {}
 
   private accessScope(actor: Actor): Prisma.LeadWhereInput {
@@ -371,9 +373,23 @@ export class LeadsService {
         followUp.calendarEventId = eventId;
         followUp.calendarSyncError = error;
         followUp.teamsJoinUrl = isMeeting ? joinUrl : null;
+
+        // Let the client know about the meeting too, not just the
+        // salesperson's calendar — only once we actually have a real link.
+        if (isMeeting && joinUrl && lead.email) {
+          await this.email.sendMeetingInviteEmail({
+            leadId: lead.id,
+            toEmail: lead.email,
+            clientName: lead.fullName,
+            meetingTime: followUp.nextFollowUpAt,
+            joinUrl,
+            subject: `${lead.fullName}${lead.company ? ` (${lead.company})` : ''}`,
+            notes: followUp.notes,
+          });
+        }
       } catch {
-        // Already logged inside CalendarService; the follow-up itself is
-        // already saved, so nothing further to do here.
+        // Already logged inside CalendarService/EmailService; the follow-up
+        // itself is already saved, so nothing further to do here.
       }
     }
     return followUp;

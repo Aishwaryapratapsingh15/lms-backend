@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsOptional, IsString } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsEmail, IsOptional, IsString } from 'class-validator';
 
 export class SendLeadEmailDto {
   @ApiProperty({ required: false })
@@ -14,11 +14,15 @@ export class SendLeadEmailDto {
   @ApiProperty({ required: false, type: [String] })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(20)
+  @IsEmail({}, { each: true })
   ccEmails?: string[];
 
   @ApiProperty({ required: false, type: [String] })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(20)
+  @IsEmail({}, { each: true })
   bccEmails?: string[];
 
   @ApiProperty()

@@ -42,6 +42,7 @@ roles, and error handling are documented in `FRONTEND_HANDOFF.md`.
 - src/email - email trigger and tracking
 - src/calendar - Outlook Calendar sync for follow-ups (Microsoft Graph)
 - src/notifications - Microsoft Teams webhook notification on new leads
+- src/settings - company-wide app settings (currently: email CC/BCC defaults)
 - src/common - guards and shared decorators
 - prisma/schema.prisma - database schema
 
@@ -273,13 +274,19 @@ Body:
   "leadId": "lead-id",
   "toEmail": "customer@example.com",
   "ccEmails": ["manager@example.com"],
-  "bccEmails": ["superadmin@lms.com", "admin@lms.com"],
+  "bccEmails": ["admin@example.com"],
   "subject": "Follow-up",
   "body": "<p>Hello, this is the email body.</p>"
 }
 ```
 
-The API also appends the configured admin visibility BCC list automatically when sending.
+`ccEmails`/`bccEmails` are both optional — whatever the sender provides here is merged with the company-wide defaults from **Settings > Email CC/BCC defaults** (`GET`/`PATCH /settings/email`, SUPER_ADMIN only; see below), not replaced by them.
+
+### Email settings (company-wide CC/BCC defaults)
+
+`GET /settings/email` — returns `{ ccEmails: string[], bccEmails: string[] }`.
+
+`PATCH /settings/email` (SUPER_ADMIN only) — body: `{ "ccEmails": [...], "bccEmails": [...] }` (each entry validated as an email, max 20 per list). These addresses are automatically merged into every `POST /emails/send` call on top of whatever the sender adds, so management always stays looped in without each salesperson having to remember to CC/BCC anyone manually.
 
 ## User APIs
 
@@ -319,6 +326,7 @@ Body:
 - If SMTP is not configured, the email still records in the database without crashing the app.
 - Follow-ups with a `nextFollowUpAt` are pushed to the assigned user's Outlook calendar via Microsoft Graph (app-only credentials, see `DOCKER.md` section 12) and removed again on completion. If `MS_GRAPH_TENANT_ID`/`MS_GRAPH_CLIENT_ID`/`MS_GRAPH_CLIENT_SECRET` are not configured, the follow-up still saves normally, just without a calendar event.
 - `MEETING`-type follow-ups additionally get a real Teams meeting attached to that calendar event, exposed as `teamsJoinUrl` on the follow-up (requires the `OnlineMeetings.ReadWrite.All` Graph permission in addition to `Calendars.ReadWrite` — see `DOCKER.md` section 12).
+- When a `MEETING` follow-up gets a Teams join link, the lead (client) is automatically emailed the meeting time and join link via the same SMTP config used for other emails (`EmailService.sendMeetingInviteEmail`). Skipped gracefully if the lead has no email on file, or if SMTP/Graph aren't configured — no separate env var needed.
 - Every new lead (from `POST /leads` or the public contact form) posts an Adaptive Card to a Microsoft Teams channel via `TEAMS_LEAD_WEBHOOK_URL` (see `DOCKER.md` section 13). If unset, lead creation is unaffected — the notification is just skipped.
 - Frontend must send every request with credentials included and echo the `csrf_token` cookie back as `x-csrf-token` on every mutating request (see Authentication Flow above) — this now applies to the whole API, not just login/refresh.
 - New env vars: `NODE_ENV` (drives the `secure` cookie flag), `COOKIE_DOMAIN` (e.g. `.eicetechnology.com` in production, unset in local dev), `CORS_ALLOWED_ORIGINS` (comma-separated allowlist, replaces the old permissive CORS setting).

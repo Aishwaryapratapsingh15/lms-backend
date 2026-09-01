@@ -86,6 +86,7 @@ model User {
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
   leadActivities      LeadActivity[]
+  emailSettingsEdits  EmailSettings[]
 }
 
 model RefreshToken {
@@ -191,6 +192,18 @@ model EmailLog {
   createdAt DateTime    @default(now())
   lead      Lead?       @relation(fields: [leadId], references: [id], onDelete: SetNull)
   user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+// Singleton row (fixed id) holding the company-wide CC/BCC addresses that
+// get merged into every lead email a salesperson sends, on top of whatever
+// they type in themselves for that one email.
+model EmailSettings {
+  id          String   @id @default("global")
+  ccEmails    String[] @default([])
+  bccEmails   String[] @default([])
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
 }
 
 model PublicEmailOtp {

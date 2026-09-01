@@ -7,6 +7,7 @@ import { UsersModule } from './users/users.module';
 import { LeadsModule } from './leads/leads.module';
 import { EmailModule } from './email/email.module';
 import { PublicFormsModule } from './public-forms/public-forms.module';
+import { SettingsModule } from './settings/settings.module';
 import { CsrfGuard } from './common/guards/csrf.guard';
 
 @Module({
@@ -18,6 +19,7 @@ import { CsrfGuard } from './common/guards/csrf.guard';
     LeadsModule,
     EmailModule,
     PublicFormsModule,
+    SettingsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: CsrfGuard }],
 })
