@@ -559,7 +559,7 @@ export class LeadsService {
           },
         }),
         this.prisma.lead.count({
-          where: { ...where, assignedToId: { not: null } },
+          where: { AND: [where, { assignedToId: { not: null } }] },
         }),
       ]);
     const won =
