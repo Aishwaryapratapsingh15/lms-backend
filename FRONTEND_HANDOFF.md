@@ -284,6 +284,24 @@ Use `GET /users` for the admin user table and `POST /users` to create a user:
 For an `ADMIN` session, show only the `SALES` role option. `SUPER_ADMIN` can select
 all roles. Sales users can call `GET /users/:id` only for their own user ID.
 
+### Dismiss a team member
+
+```http
+DELETE /users/:id
+```
+
+- Show the action only for permitted rows: Admin can dismiss Sales users;
+  Super Admin can dismiss Admin or Sales users.
+- Never show it for the signed-in user or a Super Admin row.
+- Require a confirmation dialog explaining that access will be revoked and the
+  member's assigned leads will become unassigned.
+- On success, refresh the team list, leads list, assignee options, and dashboard.
+- The response includes `unassignedLeads`, the number of leads released.
+
+The backend performs a safe dismissal rather than erasing audit history. The user
+disappears from `GET /users`, cannot log in, and any existing session is rejected
+immediately.
+
 ## Error handling
 
 | Status | Frontend action                                               |

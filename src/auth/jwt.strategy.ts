@@ -1,13 +1,17 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { ACCESS_TOKEN_COOKIE } from './cookie.util';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {
     super({
       jwtFromRequest: (req: Request) => req?.cookies?.[ACCESS_TOKEN_COOKIE] ?? null,
       ignoreExpiration: false,
@@ -16,11 +20,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
+    if (typeof payload.sub !== 'string') {
+      throw new UnauthorizedException('Invalid access token');
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { id: true, email: true, role: true, name: true, isActive: true },
+    });
+    if (!user?.isActive) {
+      throw new UnauthorizedException('User account is inactive');
+    }
     return {
-      id: payload.sub,
-      email: payload.email,
-      role: payload.role,
-      name: payload.name,
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.name,
       exp: payload.exp,
     };
   }

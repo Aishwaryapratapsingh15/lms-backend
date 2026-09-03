@@ -320,6 +320,17 @@ Body:
 
 `GET /users/:id`
 
+### Dismiss user
+
+`DELETE /users/:id`
+
+Admin can dismiss Sales users; Super Admin can dismiss Admin or Sales users.
+The current account and Super Admin accounts are protected. Dismissal removes the
+user from the active team list, revokes all refresh tokens, immediately rejects
+existing access tokens, and returns their assigned leads to the unassigned queue.
+The user record is retained internally so lead and follow-up audit history is not
+destroyed.
+
 ## Role Matrix
 
 - SUPER_ADMIN: full access

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -50,5 +51,14 @@ export class UsersController {
   @ApiOperation({ summary: 'Get a user by id' })
   getUser(@Param('id') id: string, @Req() req: RequestWithUser) {
     return this.usersService.findById(id, req.user);
+  }
+
+  @Delete(':id')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({
+    summary: 'Dismiss a user, revoke access, and unassign their leads',
+  })
+  dismissUser(@Param('id') id: string, @Req() req: RequestWithUser) {
+    return this.usersService.dismissUser(id, req.user);
   }
 }

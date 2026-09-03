@@ -50,6 +50,7 @@ export class UsersService {
 
   async findAll() {
     return this.prisma.user.findMany({
+      where: { isActive: true },
       select: {
         id: true,
         name: true,
@@ -77,5 +78,56 @@ export class UsersService {
     });
     if (!user) throw new NotFoundException('User not found');
     return user;
+  }
+
+  async dismissUser(id: string, actor: { id: string; role: Role }) {
+    if (id === actor.id) {
+      throw new ForbiddenException('You cannot dismiss your own account');
+    }
+    const target = await this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true, name: true, email: true, role: true, isActive: true },
+    });
+    if (!target?.isActive) throw new NotFoundException('Active user not found');
+    if (target.role === Role.SUPER_ADMIN) {
+      throw new ForbiddenException('Super Admin accounts cannot be dismissed');
+    }
+    if (actor.role === Role.ADMIN && target.role !== Role.SALES) {
+      throw new ForbiddenException('Admins can dismiss sales users only');
+    }
+
+    const now = new Date();
+    const result = await this.prisma.$transaction(async (tx) => {
+      const unassigned = await tx.lead.updateMany({
+        where: { assignedToId: id },
+        data: {
+          assignedToId: null,
+          unassignedAt: now,
+          slaReminderSentAt: null,
+          slaEscalatedAt: null,
+        },
+      });
+      await tx.refreshToken.updateMany({
+        where: { userId: id, revoked: false },
+        data: { revoked: true },
+      });
+      const user = await tx.user.update({
+        where: { id },
+        data: { isActive: false },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isActive: true,
+        },
+      });
+      return { user, unassignedLeads: unassigned.count };
+    });
+
+    return {
+      message: 'User dismissed and access revoked successfully',
+      ...result,
+    };
   }
 }
