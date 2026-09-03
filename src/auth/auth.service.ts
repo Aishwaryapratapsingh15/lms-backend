@@ -78,6 +78,7 @@ export class AuthService {
       role: user.role,
       name: user.name,
       isActive: user.isActive,
+      sessionVersion: user.sessionVersion,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     });
@@ -126,7 +127,10 @@ export class AuthService {
     }
     const password = await bcrypt.hash(newPassword, 12);
     await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id: userId }, data: { password } }),
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { password, sessionVersion: { increment: 1 } },
+      }),
       this.prisma.refreshToken.updateMany({
         where: { userId, revoked: false },
         data: { revoked: true },
@@ -200,7 +204,7 @@ export class AuthService {
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: resetToken.userId },
-        data: { password },
+        data: { password, sessionVersion: { increment: 1 } },
       }),
       this.prisma.passwordResetToken.update({
         where: { id: resetToken.id },
@@ -220,7 +224,16 @@ export class AuthService {
   }
 
   async logoutAll(userId: string) {
-    await this.refreshTokenService.revokeAllForUser(userId);
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { sessionVersion: { increment: 1 } },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId, revoked: false },
+        data: { revoked: true },
+      }),
+    ]);
     return { message: 'Logged out from all devices' };
   }
 
@@ -232,6 +245,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       name: user.name,
+      sessionVersion: user.sessionVersion ?? 0,
     };
 
     const expiresIn = this.configService.get<string>('JWT_ACCESS_TTL') || '15m';

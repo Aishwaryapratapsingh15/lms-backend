@@ -53,7 +53,13 @@ present and fresh before assuming a permissions issue.
 Forgot-password always shows the same success message to prevent account discovery.
 Build a `/reset-password` frontend route that reads `token` from the URL query and
 submits it with the new password. A successful password change/reset invalidates old
-refresh tokens.
+access and refresh tokens on every device.
+
+`POST /auth/logout-all` invalidates both refresh tokens and already-issued access
+tokens on every device. Other devices will receive `401` on their next API request;
+the existing global unauthorized handler must clear local session state and redirect
+to login. Browsers cannot have their cookies remotely erased, but those cookies no
+longer authorize any backend request.
 
 ## Role behavior
 

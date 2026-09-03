@@ -25,10 +25,23 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, email: true, role: true, name: true, isActive: true },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        name: true,
+        isActive: true,
+        sessionVersion: true,
+      },
     });
     if (!user?.isActive) {
       throw new UnauthorizedException('User account is inactive');
+    }
+    // Tokens issued before this field existed are version 0, preserving
+    // existing sessions until the user explicitly revokes all sessions.
+    const tokenSessionVersion = payload.sessionVersion ?? 0;
+    if (tokenSessionVersion !== user.sessionVersion) {
+      throw new UnauthorizedException('Session has been revoked');
     }
     return {
       id: user.id,

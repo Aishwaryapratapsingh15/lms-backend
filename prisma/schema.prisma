@@ -85,6 +85,7 @@ model User {
   password            String
   role                Role                 @default(SALES)
   isActive            Boolean              @default(true)
+  sessionVersion      Int                  @default(0)
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   leadsCreated        Lead[]               @relation("CreatedLeads")

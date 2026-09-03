@@ -182,7 +182,7 @@ export class AuthController {
   @Post('logout-all')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
-    summary: 'Revoke all refresh tokens for the authenticated user',
+    summary: 'Immediately revoke every session for the authenticated user',
   })
   async logoutAll(
     @Req() req: RequestWithUser,

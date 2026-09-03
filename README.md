@@ -178,7 +178,9 @@ three cookies are rotated.
 
 `POST /auth/logout` (requires an authenticated session) revokes the refresh
 token server-side and clears all three cookies. `POST /auth/logout-all` does
-the same for every session belonging to the user.
+the same for every session belonging to the user. It also increments a
+server-side session version, so access tokens already issued to other devices
+are rejected immediately instead of remaining valid until their normal expiry.
 
 ## Protected Endpoints
 

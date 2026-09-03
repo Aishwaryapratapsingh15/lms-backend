@@ -113,7 +113,7 @@ export class UsersService {
       });
       const user = await tx.user.update({
         where: { id },
-        data: { isActive: false },
+        data: { isActive: false, sessionVersion: { increment: 1 } },
         select: {
           id: true,
           name: true,
