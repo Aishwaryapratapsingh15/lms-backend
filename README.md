@@ -205,6 +205,7 @@ Body:
   "source": "WEBSITE",
   "status": "NEW",
   "priority": "HIGH",
+  "leadType": "INTERNAL",
   "notes": "Interested in a custom solution",
   "assignedToId": "sales-user-id"
 }
@@ -213,6 +214,9 @@ Body:
 ### List leads
 
 `GET /leads`
+
+Optional filters include `leadType=INTERNAL|EXTERNAL`. Results are ordered by
+`createdAt` descending before pagination.
 
 ### Dashboard summary
 
@@ -233,6 +237,9 @@ Body:
   "assignedToId": "sales-user-id"
 }
 ```
+
+Send `{ "assignedToId": null }` to unassign a lead. Assignments,
+reassignments, and unassignments are recorded in the activity timeline.
 
 ### Update lead status
 
@@ -322,6 +329,14 @@ Body:
 ## Notes
 
 - SMTP is configured using environment variables in `.env`.
+- New leads with an email address receive an acknowledgement email. Newly
+  assigned salespeople receive an assignment email. Both are logged in
+  `EmailLog`, and SMTP failure never rolls back the lead operation.
+- Authenticated LMS-created leads default to `INTERNAL`; public contact-form
+  leads are stored as `EXTERNAL`.
+- Optional unassigned-lead SLA automation is configured with
+  `LEAD_SLA_ENABLED`, `LEAD_SLA_REMINDER_MINUTES`,
+  `LEAD_SLA_ASSIGN_MINUTES`, and `LEAD_SLA_CHECK_INTERVAL_MINUTES`.
 - When credentials are present, emails are truly sent and logged.
 - If SMTP is not configured, the email still records in the database without crashing the app.
 - Follow-ups with a `nextFollowUpAt` are pushed to the assigned user's Outlook calendar via Microsoft Graph (app-only credentials, see `DOCKER.md` section 12) and removed again on completion. If `MS_GRAPH_TENANT_ID`/`MS_GRAPH_CLIENT_ID`/`MS_GRAPH_CLIENT_SECRET` are not configured, the follow-up still saves normally, just without a calendar event.

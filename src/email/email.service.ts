@@ -1,6 +1,7 @@
 import {
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -11,6 +12,8 @@ import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class EmailService {
+  private readonly logger = new Logger(EmailService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
@@ -193,6 +196,113 @@ export class EmailService {
         sentAt: sentStatus === 'SENT' ? new Date() : null,
       },
     });
+  }
+
+  async sendLeadAcknowledgementEmail(data: {
+    leadId: string;
+    toEmail: string;
+    clientName: string;
+  }) {
+    if (
+      this.configService
+        .get<string>('LEAD_ACKNOWLEDGEMENT_ENABLED')
+        ?.toLowerCase() === 'false'
+    ) {
+      return false;
+    }
+    const companyName =
+      this.configService.get<string>('COMPANY_NAME') || 'EICE Technology';
+    const subject = `We received your enquiry - ${companyName}`;
+    const body = `<p>Hello ${this.escape(data.clientName)},</p><p>Thank you for contacting ${this.escape(companyName)}. We have received your enquiry and a member of our team will contact you shortly.</p><p>Regards,<br>${this.escape(companyName)}</p>`;
+    return this.sendAutomatedLeadEmail({
+      leadId: data.leadId,
+      toEmail: data.toEmail,
+      subject,
+      body,
+    });
+  }
+
+  async sendLeadAssignmentEmail(data: {
+    leadId: string;
+    salespersonEmail: string;
+    salespersonName: string;
+    leadName: string;
+    company?: string | null;
+  }) {
+    if (
+      this.configService
+        .get<string>('LEAD_ASSIGNMENT_EMAIL_ENABLED')
+        ?.toLowerCase() === 'false'
+    ) {
+      return false;
+    }
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+    const subject = `Lead assigned: ${data.leadName}`;
+    const body = `<p>Hello ${this.escape(data.salespersonName)},</p><p>A lead has been assigned to you.</p><p><strong>${this.escape(data.leadName)}</strong>${data.company ? ` — ${this.escape(data.company)}` : ''}</p><p><a href="${this.escape(`${frontendUrl}/leads/${data.leadId}`)}">Open lead in LMS</a></p>`;
+    return this.sendAutomatedLeadEmail({
+      leadId: data.leadId,
+      toEmail: data.salespersonEmail,
+      subject,
+      body,
+    });
+  }
+
+  private async sendAutomatedLeadEmail(data: {
+    leadId: string;
+    toEmail: string;
+    subject: string;
+    body: string;
+  }) {
+    const smtpHost = this.configService.get<string>('SMTP_HOST');
+    const smtpPort = Number(this.configService.get<string>('SMTP_PORT') ?? 587);
+    const smtpUser = this.configService.get<string>('SMTP_USER');
+    const smtpPass = this.configService.get<string>('SMTP_PASS');
+    const smtpFrom = this.configService.get<string>('SMTP_FROM') ?? smtpUser;
+    let sentStatus: 'SENT' | 'FAILED' = 'FAILED';
+
+    if (smtpHost && smtpUser && smtpPass && smtpFrom) {
+      try {
+        const transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpPort === 465,
+          auth: { user: smtpUser, pass: smtpPass },
+        });
+        const response = await transporter.sendMail({
+          from: smtpFrom,
+          to: data.toEmail,
+          subject: data.subject,
+          html: data.body,
+          text: data.body.replace(/<[^>]+>/g, ' '),
+        });
+        sentStatus = response?.accepted?.length ? 'SENT' : 'FAILED';
+      } catch (error) {
+        this.logger.warn(
+          `Automated lead email failed for lead ${data.leadId}: ${error instanceof Error ? error.message : 'Unknown SMTP error'}`,
+        );
+      }
+    }
+
+    try {
+      await this.prisma.emailLog.create({
+        data: {
+          leadId: data.leadId,
+          toEmail: data.toEmail,
+          ccEmails: [],
+          bccEmails: [],
+          subject: data.subject,
+          body: data.body,
+          status: sentStatus,
+          sentAt: sentStatus === 'SENT' ? new Date() : null,
+        },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Could not log automated email for lead ${data.leadId}: ${error instanceof Error ? error.message : 'Unknown database error'}`,
+      );
+    }
+    return sentStatus === 'SENT';
   }
 
   private escape(value: string) {

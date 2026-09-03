@@ -306,7 +306,38 @@ If `TEAMS_LEAD_WEBHOOK_URL` is absent, lead creation behaves exactly as
 before — the notification is silently skipped. A failed post (bad URL,
 Teams outage) is logged and never fails the lead-creation request.
 
-## 14. Common operations
+## 14. Lead email and unassigned-lead SLA automation
+
+Client acknowledgement and salesperson assignment emails use the existing SMTP
+configuration. They are enabled by default and can be disabled independently:
+
+```env
+COMPANY_NAME=EICE Technology
+LEAD_ACKNOWLEDGEMENT_ENABLED=true
+LEAD_ASSIGNMENT_EMAIL_ENABLED=true
+```
+
+Unassigned-lead SLA automation is disabled by default so a deployment cannot
+unexpectedly distribute existing leads. After reviewing the timings and active
+sales-user list, enable it with:
+
+```env
+LEAD_SLA_ENABLED=true
+LEAD_SLA_REMINDER_MINUTES=15
+LEAD_SLA_ASSIGN_MINUTES=30
+LEAD_SLA_CHECK_INTERVAL_MINUTES=5
+```
+
+At the reminder threshold, active Admin and Super Admin users receive an email.
+At the assignment threshold, the oldest waiting leads are assigned to the active
+salesperson with the smallest current active-lead workload, and that salesperson
+receives an email. If no active salesperson exists, administrators receive an
+escalation email instead. Each SLA action is recorded in the lead timeline.
+
+Apply the committed Prisma migration before enabling this feature. The normal
+container startup already runs `prisma migrate deploy`.
+
+## 15. Common operations
 
 ```bash
 # Follow logs

@@ -40,6 +40,11 @@ enum LeadPriority {
   HIGH
 }
 
+enum LeadType {
+  INTERNAL
+  EXTERNAL
+}
+
 enum FollowUpType {
   CALL
   EMAIL
@@ -62,6 +67,9 @@ enum LeadActivityType {
   CREATED
   UPDATED
   ASSIGNED
+  AUTO_ASSIGNED
+  SLA_REMINDER_SENT
+  SLA_ESCALATED
   STATUS_CHANGED
   FOLLOW_UP_ADDED
   FOLLOW_UP_COMPLETED
@@ -113,28 +121,33 @@ model PasswordResetToken {
 }
 
 model Lead {
-  id             String         @id @default(uuid())
-  fullName       String
-  email          String?
-  phone          String?
-  company        String?
-  source         LeadSource     @default(WEBSITE)
-  status         LeadStatus     @default(NEW)
-  priority       LeadPriority   @default(MEDIUM)
-  assignedToId   String?
-  createdById    String?
-  notes          String?
-  nextFollowUpAt DateTime?
-  archivedAt     DateTime?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  assignedTo     User?          @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
-  createdBy      User?          @relation("CreatedLeads", fields: [createdById], references: [id], onDelete: SetNull)
-  followUps      LeadFollowUp[]
-  emailLogs      EmailLog[]
-  activities     LeadActivity[]
+  id                String         @id @default(uuid())
+  fullName          String
+  email             String?
+  phone             String?
+  company           String?
+  source            LeadSource     @default(WEBSITE)
+  status            LeadStatus     @default(NEW)
+  priority          LeadPriority   @default(MEDIUM)
+  leadType          LeadType       @default(INTERNAL)
+  assignedToId      String?
+  createdById       String?
+  notes             String?
+  nextFollowUpAt    DateTime?
+  archivedAt        DateTime?
+  unassignedAt      DateTime?      @default(now())
+  slaReminderSentAt DateTime?
+  slaEscalatedAt    DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  assignedTo        User?          @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdBy         User?          @relation("CreatedLeads", fields: [createdById], references: [id], onDelete: SetNull)
+  followUps         LeadFollowUp[]
+  emailLogs         EmailLog[]
+  activities        LeadActivity[]
 
   @@index([assignedToId, archivedAt, createdAt])
+  @@index([assignedToId, archivedAt, unassignedAt])
   @@index([status, archivedAt])
   @@index([email])
   @@index([phone])

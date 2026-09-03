@@ -75,7 +75,7 @@ refresh tokens.
 Use:
 
 ```http
-GET /leads?page=1&limit=20&search=&status=&source=&priority=&assignedToId=&archived=active&createdFrom=&createdTo=
+GET /leads?page=1&limit=20&search=&status=&source=&priority=&leadType=&assignedToId=&archived=active&createdFrom=&createdTo=
 ```
 
 All query parameters are optional. Allowed `archived` values are `active`,
@@ -93,7 +93,8 @@ Response:
 Required UI:
 
 - Debounced search for name, email, phone, and company
-- Status, source, priority, salesperson, archive, and date filters
+- Status, source, priority, lead type (`INTERNAL`/`EXTERNAL`), salesperson,
+  archive, and date filters
 - Server-side pagination
 - Empty/loading/error states
 - Archived badge and restore action for admins
@@ -115,6 +116,7 @@ POST /leads
   "source": "WEBSITE",
   "status": "NEW",
   "priority": "HIGH",
+  "leadType": "INTERNAL",
   "notes": "Initial enquiry",
   "assignedToId": "optional-active-sales-user-id"
 }
@@ -127,7 +129,7 @@ PATCH /leads/:id
 ```
 
 Send only changed fields: `fullName`, `email`, `phone`, `company`, `source`,
-`priority`, or `notes`.
+`priority`, `leadType`, or `notes`.
 
 If create returns `409`, show the duplicate lead returned in the error payload and
 offer to open it instead of creating another record.
@@ -145,6 +147,9 @@ Render timeline types:
 CREATED
 UPDATED
 ASSIGNED
+AUTO_ASSIGNED
+SLA_REMINDER_SENT
+SLA_ESCALATED
 STATUS_CHANGED
 FOLLOW_UP_ADDED
 FOLLOW_UP_COMPLETED
@@ -163,6 +168,10 @@ Existing actions remain:
 PATCH /leads/:id/assign       { "assignedToId": "sales-user-id" }
 PATCH /leads/:id/status       { "status": "QUALIFIED" }
 ```
+
+To unassign a lead, send `PATCH /leads/:id/assign` with
+`{ "assignedToId": null }`. An empty string is also normalized to `null` for
+compatibility with existing select controls.
 
 Archive actions for admins:
 

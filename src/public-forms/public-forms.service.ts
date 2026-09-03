@@ -11,6 +11,7 @@ import { ContactSubmissionDto } from './dto/contact-submission.dto';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { SubmitPublicFormDto } from './dto/submit-public-form.dto';
 import { TeamsNotificationService } from '../notifications/teams-notification.service';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class PublicFormsService {
@@ -18,6 +19,7 @@ export class PublicFormsService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly teamsNotifications: TeamsNotificationService,
+    private readonly email: EmailService,
   ) {}
 
   async sendOtp(dto: SendOtpDto) {
@@ -158,6 +160,7 @@ export class PublicFormsService {
           phone: `+${dto.phoneCode.trim()} ${dto.phone.trim()}`,
           company: dto.companyName.trim(),
           source: 'WEBSITE',
+          leadType: 'EXTERNAL',
           notes: this.leadNotes([
             ['Form', 'Contact'],
             ['Role', dto.role],
@@ -180,6 +183,12 @@ export class PublicFormsService {
       phone: lead.phone,
       source: lead.source,
       assignedToName: null,
+    });
+
+    await this.email.sendLeadAcknowledgementEmail({
+      leadId: lead.id,
+      toEmail: email,
+      clientName: lead.fullName,
     });
 
     try {

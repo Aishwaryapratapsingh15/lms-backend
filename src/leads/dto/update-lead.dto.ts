@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { LeadPriority, LeadSource } from '@prisma/client';
+import { LeadPriority, LeadSource, LeadType } from '@prisma/client';
 import {
   IsEmail,
   IsEnum,
@@ -39,6 +39,11 @@ export class UpdateLeadDto {
   @IsEnum(LeadPriority)
   @IsOptional()
   priority?: LeadPriority;
+
+  @ApiPropertyOptional({ enum: LeadType })
+  @IsEnum(LeadType)
+  @IsOptional()
+  leadType?: LeadType;
 
   @ApiPropertyOptional()
   @IsString()

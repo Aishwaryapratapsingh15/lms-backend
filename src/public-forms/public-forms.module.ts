@@ -4,9 +4,10 @@ import { PublicFormsService } from './public-forms.service';
 import { FormSubmissionsController } from './form-submissions.controller';
 import { RateLimitGuard } from '../common/guards/rate-limit.guard';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { EmailModule } from '../email/email.module';
 
 @Module({
-  imports: [NotificationsModule],
+  imports: [NotificationsModule, EmailModule],
   controllers: [PublicFormsController, FormSubmissionsController],
   providers: [PublicFormsService, RateLimitGuard],
 })

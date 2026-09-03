@@ -9,6 +9,7 @@ import {
   LeadPriority,
   LeadSource,
   LeadStatus,
+  LeadType,
   Prisma,
   Role,
 } from '@prisma/client';
@@ -82,6 +83,7 @@ export class LeadsService {
       source?: LeadSource;
       status?: LeadStatus;
       priority?: LeadPriority;
+      leadType?: LeadType;
       notes?: string;
       assignedToId?: string;
     },
@@ -115,7 +117,9 @@ export class LeadsService {
           source: data.source ?? LeadSource.WEBSITE,
           status: data.status ?? LeadStatus.NEW,
           priority: data.priority ?? LeadPriority.MEDIUM,
+          leadType: data.leadType ?? LeadType.INTERNAL,
           createdById: actor.id,
+          unassignedAt: data.assignedToId ? null : new Date(),
         },
         include: leadRelations,
       });
@@ -128,15 +132,37 @@ export class LeadsService {
       return created;
     });
 
-    await this.teamsNotifications.notifyNewLead({
-      id: lead.id,
-      fullName: lead.fullName,
-      company: lead.company,
-      email: lead.email,
-      phone: lead.phone,
-      source: lead.source,
-      assignedToName: lead.assignedTo?.name ?? null,
-    });
+    await Promise.allSettled([
+      this.teamsNotifications.notifyNewLead({
+        id: lead.id,
+        fullName: lead.fullName,
+        company: lead.company,
+        email: lead.email,
+        phone: lead.phone,
+        source: lead.source,
+        assignedToName: lead.assignedTo?.name ?? null,
+      }),
+      ...(lead.email
+        ? [
+            this.email.sendLeadAcknowledgementEmail({
+              leadId: lead.id,
+              toEmail: lead.email,
+              clientName: lead.fullName,
+            }),
+          ]
+        : []),
+      ...(lead.assignedTo
+        ? [
+            this.email.sendLeadAssignmentEmail({
+              leadId: lead.id,
+              salespersonEmail: lead.assignedTo.email,
+              salespersonName: lead.assignedTo.name,
+              leadName: lead.fullName,
+              company: lead.company,
+            }),
+          ]
+        : []),
+    ]);
     return lead;
   }
 
@@ -152,6 +178,7 @@ export class LeadsService {
     if (query.status) filters.push({ status: query.status });
     if (query.source) filters.push({ source: query.source });
     if (query.priority) filters.push({ priority: query.priority });
+    if (query.leadType) filters.push({ leadType: query.leadType });
     if (query.assignedToId && actor.role !== Role.SALES)
       filters.push({ assignedToId: query.assignedToId });
     if (query.archived === 'active') filters.push({ archivedAt: null });
@@ -241,6 +268,7 @@ export class LeadsService {
             company: current.company,
             source: current.source,
             priority: current.priority,
+            leadType: current.leadType,
             notes: current.notes,
           },
           changes: { ...data } as Prisma.InputJsonObject,
@@ -250,14 +278,25 @@ export class LeadsService {
     });
   }
 
-  async assignLead(leadId: string, salesId: string, actor: Actor) {
+  async assignLead(leadId: string, salesId: string | null, actor: Actor) {
     const lead = await this.accessibleLead(leadId, actor);
     this.assertActiveLead(lead);
-    await this.assertActiveSalesUser(salesId);
-    return this.prisma.$transaction(async (tx) => {
+    if (lead.assignedToId === salesId) {
+      return this.prisma.lead.findUnique({
+        where: { id: leadId },
+        include: leadRelations,
+      });
+    }
+    if (salesId) await this.assertActiveSalesUser(salesId);
+    const updated = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.lead.update({
         where: { id: leadId },
-        data: { assignedToId: salesId },
+        data: {
+          assignedToId: salesId,
+          unassignedAt: salesId ? null : new Date(),
+          slaReminderSentAt: null,
+          slaEscalatedAt: null,
+        },
         include: leadRelations,
       });
       await tx.leadActivity.create({
@@ -268,6 +307,16 @@ export class LeadsService {
       });
       return updated;
     });
+    if (updated.assignedTo) {
+      await this.email.sendLeadAssignmentEmail({
+        leadId: updated.id,
+        salespersonEmail: updated.assignedTo.email,
+        salespersonName: updated.assignedTo.name,
+        leadName: updated.fullName,
+        company: updated.company,
+      });
+    }
+    return updated;
   }
 
   async updateStatus(leadId: string, status: LeadStatus, actor: Actor) {

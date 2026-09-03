@@ -6,7 +6,7 @@ import {
   IsString,
   MinLength,
 } from 'class-validator';
-import { LeadPriority, LeadSource, LeadStatus } from '@prisma/client';
+import { LeadPriority, LeadSource, LeadStatus, LeadType } from '@prisma/client';
 
 export class CreateLeadDto {
   @ApiProperty()
@@ -43,6 +43,11 @@ export class CreateLeadDto {
   @IsOptional()
   @IsEnum(LeadPriority)
   priority?: LeadPriority;
+
+  @ApiProperty({ enum: LeadType, required: false, default: LeadType.INTERNAL })
+  @IsOptional()
+  @IsEnum(LeadType)
+  leadType?: LeadType;
 
   @ApiProperty({ required: false })
   @IsOptional()

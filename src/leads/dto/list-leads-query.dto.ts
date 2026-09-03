@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { LeadPriority, LeadSource, LeadStatus } from '@prisma/client';
+import { LeadPriority, LeadSource, LeadStatus, LeadType } from '@prisma/client';
 import {
   IsDateString,
   IsEnum,
@@ -47,6 +47,11 @@ export class ListLeadsQueryDto {
   @IsEnum(LeadPriority)
   @IsOptional()
   priority?: LeadPriority;
+
+  @ApiPropertyOptional({ enum: LeadType })
+  @IsEnum(LeadType)
+  @IsOptional()
+  leadType?: LeadType;
 
   @ApiPropertyOptional()
   @IsString()
