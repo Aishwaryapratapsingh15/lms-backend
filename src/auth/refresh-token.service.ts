@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -13,8 +14,12 @@ export class RefreshTokenService {
 
   async createRefreshToken(userId: string): Promise<string> {
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7);
+    // jti guarantees two tokens for the same user are never byte-identical —
+    // without it, signing twice within the same wall-clock second (same
+    // `iat`) for the same user/secret/TTL/issuer produces the exact same JWT
+    // string, tripping the unique constraint on RefreshToken.token.
     const token = this.jwtService.sign(
-      { sub: userId, type: 'REFRESH' } as any,
+      { sub: userId, type: 'REFRESH', jti: randomUUID() } as any,
       {
         secret:
           this.configService.get<string>('JWT_REFRESH_SECRET') ||
