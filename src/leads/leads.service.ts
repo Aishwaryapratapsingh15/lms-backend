@@ -89,6 +89,7 @@ export class LeadsService {
       product?: string;
       quantity?: number;
       productDescription?: string;
+      spokenOn?: string;
       notes?: string;
       assignedToId?: string;
     },
@@ -123,6 +124,7 @@ export class LeadsService {
           status: data.status ?? LeadStatus.NEW,
           priority: data.priority ?? LeadPriority.MEDIUM,
           leadType: data.leadType ?? LeadType.INTERNAL,
+          spokenOn: data.spokenOn ? new Date(data.spokenOn) : undefined,
           createdById: actor.id,
           unassignedAt: data.assignedToId ? null : new Date(),
         },
@@ -189,11 +191,22 @@ export class LeadsService {
     if (query.archived === 'active') filters.push({ archivedAt: null });
     if (query.archived === 'archived')
       filters.push({ archivedAt: { not: null } });
+    if (query.prospect === 'exclude') filters.push({ prospectedAt: null });
+    if (query.prospect === 'only')
+      filters.push({ prospectedAt: { not: null } });
     if (query.createdFrom || query.createdTo) {
       filters.push({
         createdAt: {
           gte: query.createdFrom ? new Date(query.createdFrom) : undefined,
           lte: query.createdTo ? new Date(query.createdTo) : undefined,
+        },
+      });
+    }
+    if (query.prospectedFrom || query.prospectedTo) {
+      filters.push({
+        prospectedAt: {
+          gte: query.prospectedFrom ? new Date(query.prospectedFrom) : undefined,
+          lte: query.prospectedTo ? new Date(query.prospectedTo) : undefined,
         },
       });
     }
@@ -261,7 +274,15 @@ export class LeadsService {
     return this.prisma.$transaction(async (tx) => {
       const lead = await tx.lead.update({
         where: { id },
-        data,
+        data: {
+          ...data,
+          spokenOn:
+            data.spokenOn === undefined
+              ? undefined
+              : data.spokenOn
+                ? new Date(data.spokenOn)
+                : null,
+        },
         include: leadRelations,
       });
       await tx.leadActivity.create({
@@ -510,7 +531,7 @@ export class LeadsService {
       where: {
         completedAt: null,
         nextFollowUpAt: dateFilter,
-        lead: this.accessScope(actor),
+        lead: { ...this.accessScope(actor), archivedAt: null },
       },
       include: {
         lead: {
@@ -537,7 +558,7 @@ export class LeadsService {
       where: {
         completedAt: null,
         nextFollowUpAt: { not: null },
-        lead: this.accessScope(actor),
+        lead: { ...this.accessScope(actor), archivedAt: null },
         reads: { none: { userId: actor.id } },
       },
     });
@@ -612,6 +633,32 @@ export class LeadsService {
     });
   }
 
+  // Prospect is a separate track from `status` — a salesperson calls this
+  // after a first call/meeting convinces them the lead is worth pursuing.
+  // Moving in takes the lead out of the main Leads list (mirrors archive);
+  // moving back out (unprospect === true) restores it there.
+  async setProspect(id: string, actor: Actor, unprospect = false) {
+    const lead = await this.accessibleLead(id, actor);
+    this.assertActiveLead(lead);
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.lead.update({
+        where: { id },
+        data: { prospectedAt: unprospect ? null : new Date() },
+        include: leadRelations,
+      });
+      await tx.leadActivity.create({
+        data: this.activity(
+          id,
+          actor.id,
+          unprospect
+            ? LeadActivityType.UNMARKED_PROSPECT
+            : LeadActivityType.MARKED_PROSPECT,
+        ),
+      });
+      return updated;
+    });
+  }
+
   async dashboardSummary(query: DashboardQueryDto, actor: Actor) {
     const createdAt =
       query.from || query.to
@@ -635,6 +682,7 @@ export class LeadsService {
       assigned,
       callsLogged,
       meetingsLogged,
+      followUpsLogged,
       recentWins,
     ] = await Promise.all([
         this.prisma.lead.count({ where }),
@@ -669,8 +717,22 @@ export class LeadsService {
         this.prisma.leadFollowUp.count({
           where: { type: 'MEETING', createdAt, lead: followUpScope },
         }),
+        // Every follow-up type combined (CALL, EMAIL, MEETING, NOTE) — the
+        // spreadsheet tracked this as its own "Follow-ups" column, separate
+        // from the Call/Meeting breakdowns above.
+        this.prisma.leadFollowUp.count({
+          where: { createdAt, lead: followUpScope },
+        }),
+        // Filtered by wonAt within the requested range, not createdAt — a
+        // lead created long ago but won within this range still belongs in
+        // "recent wins", and one created in-range but won outside it (or
+        // not at all) does not.
         this.prisma.lead.findMany({
-          where: { ...where, wonAt: { not: null } },
+          where: {
+            ...this.accessScope(actor),
+            archivedAt: null,
+            wonAt: createdAt ?? { not: null },
+          },
           select: { id: true, fullName: true, company: true, wonAt: true },
           orderBy: { wonAt: 'desc' },
           take: 20,
@@ -738,6 +800,7 @@ export class LeadsService {
       overdueFollowUps,
       callsLogged,
       meetingsLogged,
+      followUpsLogged,
       recentWins,
       byStatus: Object.fromEntries(
         byStatus.map((item) => [item.status, item._count._all]),

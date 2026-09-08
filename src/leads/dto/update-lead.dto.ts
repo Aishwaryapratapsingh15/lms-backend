@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { LeadPriority, LeadSource, LeadType } from '@prisma/client';
 import {
+  IsDateString,
   IsEmail,
   IsEnum,
   IsInt,
@@ -72,6 +73,11 @@ export class UpdateLeadDto {
   @IsString()
   @IsOptional()
   productDescription?: string;
+
+  @ApiPropertyOptional({ description: 'When first contact/conversation with this lead happened' })
+  @IsDateString()
+  @IsOptional()
+  spokenOn?: string;
 
   @ApiPropertyOptional()
   @IsString()

@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  IsDateString,
   IsEmail,
   IsEnum,
   IsInt,
@@ -76,6 +77,11 @@ export class CreateLeadDto {
   @IsOptional()
   @IsString()
   productDescription?: string;
+
+  @ApiProperty({ required: false, description: 'When first contact/conversation with this lead happened' })
+  @IsOptional()
+  @IsDateString()
+  spokenOn?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()

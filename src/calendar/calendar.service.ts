@@ -151,6 +151,48 @@ export class CalendarService {
     }
   }
 
+  // Used by the polling reconciliation job to detect a reschedule/cancel
+  // made directly in Outlook/Teams. Returns null for a 404 — a single
+  // (non-recurring) event's "cancel" in Outlook is the same as deleting it,
+  // so a missing event and a cancelled one are indistinguishable and treated
+  // the same way by callers.
+  async getEvent(
+    userEmail: string,
+    eventId: string,
+  ): Promise<{ start: Date } | null> {
+    if (!this.isConfigured()) return null;
+    const token = await this.getAccessToken();
+    if (!token) return null;
+    try {
+      const res = await fetch(
+        `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(userEmail)}/events/${eventId}?$select=start,isCancelled`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (res.status === 404) return null;
+      if (!res.ok) {
+        this.logger.warn(
+          `Graph event lookup failed for ${userEmail}/${eventId}: ${res.status}`,
+        );
+        return null;
+      }
+      const event = (await res.json()) as {
+        isCancelled?: boolean;
+        start?: { dateTime: string };
+      };
+      if (event.isCancelled || !event.start) return null;
+      // Graph returns start.dateTime without a timezone suffix when the
+      // event's timeZone field is UTC (as ours always is) — appending "Z"
+      // keeps this from being misparsed as local time.
+      return { start: new Date(`${event.start.dateTime}Z`) };
+    } catch (err) {
+      this.logger.error(
+        `Graph event lookup threw for ${userEmail}/${eventId}`,
+        err as Error,
+      );
+      return null;
+    }
+  }
+
   async deleteEvent(userEmail: string, eventId: string): Promise<void> {
     if (!this.isConfigured()) return;
     const token = await this.getAccessToken();

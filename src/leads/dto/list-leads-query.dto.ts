@@ -66,6 +66,17 @@ export class ListLeadsQueryDto {
   @IsOptional()
   archived: 'active' | 'archived' | 'all' = 'active';
 
+  // Once a lead is moved to Prospect it leaves the main Leads list — "exclude"
+  // is the default so /leads keeps behaving exactly as it did before this
+  // existed; the Prospects page is the only caller that passes "only".
+  @ApiPropertyOptional({
+    enum: ['exclude', 'only', 'all'],
+    default: 'exclude',
+  })
+  @IsIn(['exclude', 'only', 'all'])
+  @IsOptional()
+  prospect: 'exclude' | 'only' | 'all' = 'exclude';
+
   @ApiPropertyOptional()
   @IsDateString()
   @IsOptional()
@@ -75,4 +86,16 @@ export class ListLeadsQueryDto {
   @IsDateString()
   @IsOptional()
   createdTo?: string;
+
+  // Filters by when a lead was moved to Prospect, not when it was created —
+  // the Prospects page's month picker uses these instead of createdFrom/To.
+  @ApiPropertyOptional()
+  @IsDateString()
+  @IsOptional()
+  prospectedFrom?: string;
+
+  @ApiPropertyOptional()
+  @IsDateString()
+  @IsOptional()
+  prospectedTo?: string;
 }

@@ -38,7 +38,12 @@ export class VendorEventsService {
       where: { id },
       data: {
         ...dto,
-        eventDate: dto.eventDate ? new Date(dto.eventDate) : undefined,
+        eventDate:
+          dto.eventDate === undefined
+            ? undefined
+            : dto.eventDate
+              ? new Date(dto.eventDate)
+              : null,
       },
     });
   }

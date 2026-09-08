@@ -170,4 +170,18 @@ export class LeadsController {
   restore(@Param('id') id: string, @Req() req: RequestWithUser) {
     return this.leadsService.archive(id, req.user, true);
   }
+
+  @Patch(':id/prospect')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'SALES')
+  @ApiOperation({ summary: 'Move a lead to Prospect' })
+  markProspect(@Param('id') id: string, @Req() req: RequestWithUser) {
+    return this.leadsService.setProspect(id, req.user);
+  }
+
+  @Patch(':id/unprospect')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'SALES')
+  @ApiOperation({ summary: 'Move a Prospect back to Leads' })
+  unmarkProspect(@Param('id') id: string, @Req() req: RequestWithUser) {
+    return this.leadsService.setProspect(id, req.user, true);
+  }
 }

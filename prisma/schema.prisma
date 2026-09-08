@@ -82,6 +82,10 @@ enum LeadActivityType {
   EMAIL_SENT
   ARCHIVED
   RESTORED
+  MARKED_PROSPECT
+  UNMARKED_PROSPECT
+  MEETING_RESCHEDULED
+  MEETING_CANCELLED
 }
 
 model User {
@@ -161,6 +165,7 @@ model Lead {
   product           String?
   quantity          Int?
   productDescription String?
+  spokenOn          DateTime?
   assignedToId      String?
   createdById       String?
   notes             String?
@@ -170,6 +175,7 @@ model Lead {
   slaReminderSentAt DateTime?
   slaEscalatedAt    DateTime?
   wonAt             DateTime?
+  prospectedAt      DateTime?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
   assignedTo        User?          @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
@@ -181,6 +187,7 @@ model Lead {
   @@index([assignedToId, archivedAt, createdAt])
   @@index([assignedToId, archivedAt, unassignedAt])
   @@index([status, archivedAt])
+  @@index([archivedAt, prospectedAt])
   @@index([email])
   @@index([phone])
 }
