@@ -58,7 +58,7 @@ export class InboundEmailService implements OnModuleInit, OnModuleDestroy {
     this.running = true;
     try {
       const user = this.config.get<string>('IMAP_USER');
-      const pass = this.config.get<string>('IMAP_PASSWORD');
+      const pass = this.config.get<string>('IMAP_PASS');
       if (!user || !pass) return;
       const host = this.config.get<string>('IMAP_HOST') || 'imap.gmail.com';
       const port = Number(this.config.get<string>('IMAP_PORT') ?? 993);
