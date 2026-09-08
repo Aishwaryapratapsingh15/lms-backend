@@ -3,8 +3,10 @@ import { LeadPriority, LeadSource, LeadType } from '@prisma/client';
 import {
   IsEmail,
   IsEnum,
+  IsInt,
   IsOptional,
   IsString,
+  Min,
   MinLength,
 } from 'class-validator';
 
@@ -44,6 +46,32 @@ export class UpdateLeadDto {
   @IsEnum(LeadType)
   @IsOptional()
   leadType?: LeadType;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  city?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  state?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  product?: string;
+
+  @ApiPropertyOptional()
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  quantity?: number;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  productDescription?: string;
 
   @ApiPropertyOptional()
   @IsString()

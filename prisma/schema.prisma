@@ -29,9 +29,15 @@ enum LeadStatus {
   FOLLOW_UP
   QUALIFIED
   PROPOSAL
+  PO_RECEIVED
   WON
   LOST
   PROJECT_IS_OURS
+}
+
+enum VendorEventAttendance {
+  ATTENDED
+  VIRTUAL_MEETING
 }
 
 enum LeadPriority {
@@ -96,6 +102,25 @@ model User {
   passwordResetTokens PasswordResetToken[]
   leadActivities      LeadActivity[]
   emailSettingsEdits  EmailSettings[]
+  followUpReads       FollowUpRead[]
+  vendorEventsCreated VendorEvent[]
+}
+
+// Vendor/product training & launch events — deliberately not tied to any
+// Lead. Unlike everything else in this file, these aren't customer records;
+// they're an internal log of product briefings/training the team attended.
+model VendorEvent {
+  id          String                 @id @default(uuid())
+  productName String
+  eventDate   DateTime?
+  attendance  VendorEventAttendance?
+  notes       String?
+  createdById String?
+  createdBy   User?                  @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  @@index([eventDate])
 }
 
 model RefreshToken {
@@ -131,6 +156,11 @@ model Lead {
   status            LeadStatus     @default(NEW)
   priority          LeadPriority   @default(MEDIUM)
   leadType          LeadType       @default(INTERNAL)
+  city              String?
+  state             String?
+  product           String?
+  quantity          Int?
+  productDescription String?
   assignedToId      String?
   createdById       String?
   notes             String?
@@ -139,6 +169,7 @@ model Lead {
   unassignedAt      DateTime?      @default(now())
   slaReminderSentAt DateTime?
   slaEscalatedAt    DateTime?
+  wonAt             DateTime?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
   assignedTo        User?          @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
@@ -174,8 +205,25 @@ model LeadFollowUp {
   calendarMailbox   String?
   lead              Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
   user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reads             FollowUpRead[]
 
   @@index([nextFollowUpAt, completedAt])
+}
+
+// Per-user "seen" marker for a reminder — distinct from LeadFollowUp.completedAt,
+// which is a real business action. Different users (e.g. Admin vs the assigned
+// salesperson) see overlapping-but-different reminder lists, so read state has
+// to be tracked per (user, followUp) pair rather than on the follow-up itself.
+model FollowUpRead {
+  id         String       @id @default(uuid())
+  userId     String
+  followUpId String
+  seenAt     DateTime     @default(now())
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  followUp   LeadFollowUp @relation(fields: [followUpId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, followUpId])
+  @@index([followUpId])
 }
 
 model LeadActivity {

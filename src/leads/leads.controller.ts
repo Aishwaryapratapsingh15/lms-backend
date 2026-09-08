@@ -23,6 +23,7 @@ import { CalendarQueryDto } from './dto/calendar-query.dto';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
 import { ListLeadsQueryDto } from './dto/list-leads-query.dto';
 import { RemindersQueryDto } from './dto/reminders-query.dto';
+import { MarkRemindersSeenDto } from './dto/mark-reminders-seen.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
 
 @ApiTags('Leads')
@@ -56,6 +57,23 @@ export class LeadsController {
   })
   reminders(@Query() query: RemindersQueryDto, @Req() req: RequestWithUser) {
     return this.leadsService.reminders(query, req.user);
+  }
+
+  @Get('reminders/unread-count')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'SALES')
+  @ApiOperation({ summary: 'Count of reminders not yet seen by the current user' })
+  unreadReminderCount(@Req() req: RequestWithUser) {
+    return this.leadsService.unreadReminderCount(req.user);
+  }
+
+  @Post('reminders/seen')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'SALES')
+  @ApiOperation({ summary: 'Mark reminders as seen by the current user' })
+  markRemindersSeen(
+    @Body() dto: MarkRemindersSeenDto,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.leadsService.markRemindersSeen(dto.followUpIds, req.user);
   }
 
   @Get('calendar')

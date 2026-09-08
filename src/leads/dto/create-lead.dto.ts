@@ -2,8 +2,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsEmail,
   IsEnum,
+  IsInt,
   IsOptional,
   IsString,
+  Min,
   MinLength,
 } from 'class-validator';
 import { LeadPriority, LeadSource, LeadStatus, LeadType } from '@prisma/client';
@@ -48,6 +50,32 @@ export class CreateLeadDto {
   @IsOptional()
   @IsEnum(LeadType)
   leadType?: LeadType;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  state?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  product?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  quantity?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  productDescription?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()

@@ -84,6 +84,11 @@ export class LeadsService {
       status?: LeadStatus;
       priority?: LeadPriority;
       leadType?: LeadType;
+      city?: string;
+      state?: string;
+      product?: string;
+      quantity?: number;
+      productDescription?: string;
       notes?: string;
       assignedToId?: string;
     },
@@ -325,7 +330,10 @@ export class LeadsService {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.lead.update({
         where: { id: leadId },
-        data: { status },
+        data: {
+          status,
+          wonAt: status === LeadStatus.WON ? new Date() : lead.wonAt,
+        },
       });
       await tx.leadActivity.create({
         data: this.activity(leadId, actor.id, LeadActivityType.STATUS_CHANGED, {
@@ -498,7 +506,7 @@ export class LeadsService {
     if (query.range === 'today') dateFilter = { gte: startToday, lt: endToday };
     if (query.range === 'upcoming') dateFilter = { gte: endToday };
 
-    return this.prisma.leadFollowUp.findMany({
+    const reminders = await this.prisma.leadFollowUp.findMany({
       where: {
         completedAt: null,
         nextFollowUpAt: dateFilter,
@@ -511,10 +519,45 @@ export class LeadsService {
           },
         },
         user: { select: { id: true, name: true, email: true } },
+        reads: { where: { userId: actor.id }, select: { seenAt: true } },
       },
       orderBy: { nextFollowUpAt: 'asc' },
       take: query.limit,
     });
+    return reminders.map(({ reads, ...reminder }) => ({
+      ...reminder,
+      seenAt: reads[0]?.seenAt ?? null,
+    }));
+  }
+
+  // Badge count for the notification bell — cheaper than fetching the full
+  // reminders list just to measure it, and not bounded by `query.limit`.
+  async unreadReminderCount(actor: Actor) {
+    const count = await this.prisma.leadFollowUp.count({
+      where: {
+        completedAt: null,
+        nextFollowUpAt: { not: null },
+        lead: this.accessScope(actor),
+        reads: { none: { userId: actor.id } },
+      },
+    });
+    return { count };
+  }
+
+  // Marks reminders as seen for the current user only — read state is
+  // per-user (an Admin and the assigned salesperson see overlapping but
+  // different reminder lists), so this can never affect another user's badge.
+  async markRemindersSeen(followUpIds: string[], actor: Actor) {
+    const visible = await this.prisma.leadFollowUp.findMany({
+      where: { id: { in: followUpIds }, lead: this.accessScope(actor) },
+      select: { id: true },
+    });
+    if (!visible.length) return { marked: 0 };
+    const result = await this.prisma.followUpRead.createMany({
+      data: visible.map(({ id }) => ({ userId: actor.id, followUpId: id })),
+      skipDuplicates: true,
+    });
+    return { marked: result.count };
   }
 
   // Powers the calendar-grid view: unlike reminders() this returns every
@@ -582,8 +625,18 @@ export class LeadsService {
       archivedAt: null,
       createdAt,
     };
-    const [total, byStatus, bySource, byPriority, overdueFollowUps, assigned] =
-      await Promise.all([
+    const followUpScope = { ...this.accessScope(actor), archivedAt: null };
+    const [
+      total,
+      byStatus,
+      bySource,
+      byPriority,
+      overdueFollowUps,
+      assigned,
+      callsLogged,
+      meetingsLogged,
+      recentWins,
+    ] = await Promise.all([
         this.prisma.lead.count({ where }),
         this.prisma.lead.groupBy({
           by: ['status'],
@@ -604,11 +657,23 @@ export class LeadsService {
           where: {
             completedAt: null,
             nextFollowUpAt: { lt: new Date() },
-            lead: { ...this.accessScope(actor), archivedAt: null },
+            lead: followUpScope,
           },
         }),
         this.prisma.lead.count({
           where: { AND: [where, { assignedToId: { not: null } }] },
+        }),
+        this.prisma.leadFollowUp.count({
+          where: { type: 'CALL', createdAt, lead: followUpScope },
+        }),
+        this.prisma.leadFollowUp.count({
+          where: { type: 'MEETING', createdAt, lead: followUpScope },
+        }),
+        this.prisma.lead.findMany({
+          where: { ...where, wonAt: { not: null } },
+          select: { id: true, fullName: true, company: true, wonAt: true },
+          orderBy: { wonAt: 'desc' },
+          take: 20,
         }),
       ]);
     const won =
@@ -671,6 +736,9 @@ export class LeadsService {
       won,
       conversionRate: total ? Number(((won / total) * 100).toFixed(2)) : 0,
       overdueFollowUps,
+      callsLogged,
+      meetingsLogged,
+      recentWins,
       byStatus: Object.fromEntries(
         byStatus.map((item) => [item.status, item._count._all]),
       ),
