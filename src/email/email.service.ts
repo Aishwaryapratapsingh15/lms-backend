@@ -100,6 +100,7 @@ export class EmailService {
         subject: data.subject,
         body: data.body,
         status: sentStatus,
+        messageId: response?.messageId ?? null,
         sentAt: sentStatus === 'SENT' ? new Date() : null,
       },
     });
@@ -169,6 +170,7 @@ export class EmailService {
     });
 
     let sentStatus: 'SENT' | 'FAILED' = 'FAILED';
+    let messageId: string | null = null;
     if (smtpHost && smtpUser && smtpPass) {
       try {
         const response = await transporter.sendMail({
@@ -179,6 +181,7 @@ export class EmailService {
           text: body.replace(/<[^>]+>/g, ' '),
         });
         sentStatus = response?.accepted?.length ? 'SENT' : 'FAILED';
+        messageId = response?.messageId ?? null;
       } catch {
         sentStatus = 'FAILED';
       }
@@ -193,6 +196,7 @@ export class EmailService {
         subject,
         body,
         status: sentStatus,
+        messageId,
         sentAt: sentStatus === 'SENT' ? new Date() : null,
       },
     });
@@ -260,6 +264,7 @@ export class EmailService {
     const smtpPass = this.configService.get<string>('SMTP_PASS');
     const smtpFrom = this.configService.get<string>('SMTP_FROM') ?? smtpUser;
     let sentStatus: 'SENT' | 'FAILED' = 'FAILED';
+    let messageId: string | null = null;
 
     if (smtpHost && smtpUser && smtpPass && smtpFrom) {
       try {
@@ -277,6 +282,7 @@ export class EmailService {
           text: data.body.replace(/<[^>]+>/g, ' '),
         });
         sentStatus = response?.accepted?.length ? 'SENT' : 'FAILED';
+        messageId = response?.messageId ?? null;
       } catch (error) {
         this.logger.warn(
           `Automated lead email failed for lead ${data.leadId}: ${error instanceof Error ? error.message : 'Unknown SMTP error'}`,
@@ -294,6 +300,7 @@ export class EmailService {
           subject: data.subject,
           body: data.body,
           status: sentStatus,
+          messageId,
           sentAt: sentStatus === 'SENT' ? new Date() : null,
         },
       });
@@ -303,6 +310,63 @@ export class EmailService {
       );
     }
     return sentStatus === 'SENT';
+  }
+
+  // Called by InboundEmailService once it's matched an incoming reply to a
+  // lead via In-Reply-To/References threading. The client keeps seeing and
+  // replying to the one shared address; this is what actually gets the
+  // salesperson to see it, landing in their own real mailbox via normal SMTP
+  // delivery rather than any Graph mailbox-injection.
+  async forwardReplyToRecipient(data: {
+    toEmail: string;
+    leadId: string;
+    leadName: string;
+    fromAddress: string;
+    originalSubject: string;
+    replyText: string;
+  }) {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+    const subject = `Client replied: ${data.leadName}`;
+    const body = `<p>${this.escape(data.fromAddress)} replied on <strong>${this.escape(data.originalSubject)}</strong>:</p><blockquote style="border-left:3px solid #ccc;margin:0;padding-left:12px;color:#444;">${this.escape(data.replyText).replaceAll('\n', '<br>')}</blockquote><p><a href="${this.escape(`${frontendUrl}/leads/${data.leadId}`)}">Open lead in LMS</a></p>`;
+    return this.sendAutomatedLeadEmail({
+      leadId: data.leadId,
+      toEmail: data.toEmail,
+      subject,
+      body,
+    });
+  }
+
+  // Records the reply itself against the lead — separate from the forward
+  // above, which is about getting a human to notice; this is what makes it
+  // show up in the lead's own Emails/timeline history.
+  async logInboundReply(data: {
+    leadId: string;
+    fromEmail: string;
+    subject: string;
+    body: string;
+  }) {
+    const emailLog = await this.prisma.emailLog.create({
+      data: {
+        leadId: data.leadId,
+        toEmail: data.fromEmail,
+        ccEmails: [],
+        bccEmails: [],
+        subject: data.subject,
+        body: data.body,
+        status: 'SENT',
+        direction: 'INBOUND',
+        sentAt: new Date(),
+      },
+    });
+    await this.prisma.leadActivity.create({
+      data: {
+        leadId: data.leadId,
+        type: LeadActivityType.EMAIL_REPLY_RECEIVED,
+        details: { emailLogId: emailLog.id, fromEmail: data.fromEmail },
+      },
+    });
+    return emailLog;
   }
 
   private escape(value: string) {

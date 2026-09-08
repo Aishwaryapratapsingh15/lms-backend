@@ -64,6 +64,11 @@ enum EmailStatus {
   FAILED
 }
 
+enum EmailDirection {
+  OUTBOUND
+  INBOUND
+}
+
 enum TokenType {
   ACCESS
   REFRESH
@@ -86,6 +91,7 @@ enum LeadActivityType {
   UNMARKED_PROSPECT
   MEETING_RESCHEDULED
   MEETING_CANCELLED
+  EMAIL_REPLY_RECEIVED
 }
 
 model User {
@@ -248,7 +254,7 @@ model LeadActivity {
 }
 
 model EmailLog {
-  id        String      @id @default(uuid())
+  id        String         @id @default(uuid())
   leadId    String?
   userId    String?
   toEmail   String
@@ -256,11 +262,17 @@ model EmailLog {
   bccEmails String[]
   subject   String
   body      String
-  status    EmailStatus @default(PENDING)
+  status    EmailStatus    @default(PENDING)
+  direction EmailDirection @default(OUTBOUND)
+  // Outgoing mail's own Message-ID — an inbound reply's In-Reply-To/References
+  // header is matched against this to find which lead it belongs to.
+  messageId String?
   sentAt    DateTime?
-  createdAt DateTime    @default(now())
-  lead      Lead?       @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime       @default(now())
+  lead      Lead?          @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  user      User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([messageId])
 }
 
 // Singleton row (fixed id) holding the company-wide CC/BCC addresses that
