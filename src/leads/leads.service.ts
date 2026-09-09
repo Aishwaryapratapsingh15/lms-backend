@@ -639,7 +639,12 @@ export class LeadsService {
   // after a first call/meeting convinces them the lead is worth pursuing.
   // Moving in takes the lead out of the main Leads list (mirrors archive);
   // moving back out (unprospect === true) restores it there.
-  async setProspect(id: string, actor: Actor, unprospect = false) {
+  async setProspect(
+    id: string,
+    actor: Actor,
+    unprospect = false,
+    reason?: string,
+  ) {
     const lead = await this.accessibleLead(id, actor);
     this.assertActiveLead(lead);
     return this.prisma.$transaction(async (tx) => {
@@ -655,6 +660,7 @@ export class LeadsService {
           unprospect
             ? LeadActivityType.UNMARKED_PROSPECT
             : LeadActivityType.MARKED_PROSPECT,
+          unprospect ? undefined : { reason },
         ),
       });
       return updated;

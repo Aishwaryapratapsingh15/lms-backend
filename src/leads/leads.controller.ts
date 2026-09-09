@@ -25,6 +25,7 @@ import { ListLeadsQueryDto } from './dto/list-leads-query.dto';
 import { RemindersQueryDto } from './dto/reminders-query.dto';
 import { MarkRemindersSeenDto } from './dto/mark-reminders-seen.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
+import { MarkProspectDto } from './dto/mark-prospect.dto';
 
 @ApiTags('Leads')
 @ApiBearerAuth()
@@ -174,8 +175,12 @@ export class LeadsController {
   @Patch(':id/prospect')
   @Roles('SUPER_ADMIN', 'ADMIN', 'SALES')
   @ApiOperation({ summary: 'Move a lead to Prospect' })
-  markProspect(@Param('id') id: string, @Req() req: RequestWithUser) {
-    return this.leadsService.setProspect(id, req.user);
+  markProspect(
+    @Param('id') id: string,
+    @Body() dto: MarkProspectDto,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.leadsService.setProspect(id, req.user, false, dto.reason);
   }
 
   @Patch(':id/unprospect')

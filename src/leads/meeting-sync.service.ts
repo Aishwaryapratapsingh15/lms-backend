@@ -39,7 +39,7 @@ export class MeetingSyncService implements OnModuleInit, OnModuleDestroy {
     }
     const intervalMinutes = this.positiveMinutes(
       'MEETING_SYNC_CHECK_INTERVAL_MINUTES',
-      10,
+      5,
     );
     this.timer = setInterval(
       () => void this.process().catch((error) => this.logFailure(error)),
