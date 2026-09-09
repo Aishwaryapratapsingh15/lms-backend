@@ -245,7 +245,9 @@ export class LeadsService {
           orderBy: { createdAt: 'desc' },
           include: { user: { select: { id: true, name: true, email: true } } },
         },
-        emailLogs: { orderBy: { createdAt: 'desc' } },
+        // Ascending — this powers a conversation-thread view, oldest first,
+        // not a "recent activity" list.
+        emailLogs: { orderBy: { createdAt: 'asc' } },
       },
     });
   }

@@ -337,6 +337,27 @@ export class EmailService {
     });
   }
 
+  // Staff sometimes reply from their own real mailbox to the "Client
+  // replied" notification instead of using the LMS UI — that reply lands
+  // back in the shared inbox just like a client reply would. This is what
+  // actually gets it out to the client, instead of InboundEmailService
+  // bouncing another "client replied" notification back to the same staff
+  // member who just wrote it.
+  async relayStaffReplyToClient(data: {
+    leadId: string;
+    toEmail: string;
+    subject: string;
+    body: string;
+  }) {
+    const html = `<p>${this.escape(data.body).replaceAll('\n', '<br>')}</p>`;
+    return this.sendAutomatedLeadEmail({
+      leadId: data.leadId,
+      toEmail: data.toEmail,
+      subject: data.subject,
+      body: html,
+    });
+  }
+
   // Records the reply itself against the lead — separate from the forward
   // above, which is about getting a human to notice; this is what makes it
   // show up in the lead's own Emails/timeline history.

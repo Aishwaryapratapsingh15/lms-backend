@@ -122,6 +122,27 @@ export class InboundEmailService implements OnModuleInit, OnModuleDestroy {
       parsed.text || (parsed.html ? parsed.html.replace(/<[^>]+>/g, ' ') : '');
     const subject = parsed.subject || matchedLog.subject;
 
+    // A staff member replying from their own real mailbox (to the "Client
+    // replied" notification) lands in this same shared inbox. Relay it on
+    // to the client instead of treating it as another client reply and
+    // forwarding a notification back to the very person who just wrote it.
+    const staffSender = await this.prisma.user.findFirst({
+      where: { email: { equals: fromAddress, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (staffSender) {
+      if (matchedLog.lead.email) {
+        await this.email.relayStaffReplyToClient({
+          leadId: matchedLog.leadId,
+          toEmail: matchedLog.lead.email,
+          subject,
+          body: replyText,
+        });
+      }
+      await client.messageFlagsAdd(String(uid), ['\\Seen'], { uid: true });
+      return;
+    }
+
     await this.email.logInboundReply({
       leadId: matchedLog.leadId,
       fromEmail: fromAddress,
