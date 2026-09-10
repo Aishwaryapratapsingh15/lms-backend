@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -10,6 +10,7 @@ import { PublicFormsModule } from './public-forms/public-forms.module';
 import { SettingsModule } from './settings/settings.module';
 import { VendorEventsModule } from './vendor-events/vendor-events.module';
 import { CsrfGuard } from './common/guards/csrf.guard';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 @Module({
   imports: [
@@ -23,6 +24,9 @@ import { CsrfGuard } from './common/guards/csrf.guard';
     SettingsModule,
     VendorEventsModule,
   ],
-  providers: [{ provide: APP_GUARD, useClass: CsrfGuard }],
+  providers: [
+    { provide: APP_GUARD, useClass: CsrfGuard },
+    { provide: APP_FILTER, useClass: HttpExceptionFilter },
+  ],
 })
 export class AppModule {}

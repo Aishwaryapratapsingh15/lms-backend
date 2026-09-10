@@ -7,20 +7,21 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
 import {
   RATE_LIMIT_KEY,
   RateLimitOptions,
 } from '../decorators/rate-limit.decorator';
 
-type Bucket = { count: number; resetAt: number };
-
 @Injectable()
 export class RateLimitGuard implements CanActivate {
-  private static readonly buckets = new Map<string, Bucket>();
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly prisma: PrismaService,
+  ) {}
 
-  constructor(private readonly reflector: Reflector) {}
-
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const options = this.reflector.getAllAndOverride<RateLimitOptions>(
       RATE_LIMIT_KEY,
       [context.getHandler(), context.getClass()],
@@ -29,28 +30,51 @@ export class RateLimitGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<Request>();
     const response = context.switchToHttp().getResponse<Response>();
-    const now = Date.now();
+    const now = new Date();
     const route = request.route?.path ?? request.path;
     const ip = request.ip || request.socket.remoteAddress || 'unknown';
     const key = `${request.method}:${route}:${ip}`;
-    let bucket = RateLimitGuard.buckets.get(key);
-    if (!bucket || bucket.resetAt <= now) {
-      bucket = { count: 0, resetAt: now + options.windowSeconds * 1000 };
+    const resetAt = new Date(now.getTime() + options.windowSeconds * 1000);
+
+    // Single atomic upsert, backed by Postgres rather than in-process
+    // memory, so counters survive process restarts and stay consistent
+    // across multiple backend instances sharing this database.
+    const [bucket] = await this.prisma.$queryRaw<
+      { count: number; resetAt: Date }[]
+    >(Prisma.sql`
+      INSERT INTO "RateLimitBucket" ("key", "count", "resetAt")
+      VALUES (${key}, 1, ${resetAt})
+      ON CONFLICT ("key") DO UPDATE SET
+        "count" = CASE
+          WHEN "RateLimitBucket"."resetAt" <= ${now} THEN 1
+          ELSE "RateLimitBucket"."count" + 1
+        END,
+        "resetAt" = CASE
+          WHEN "RateLimitBucket"."resetAt" <= ${now} THEN ${resetAt}
+          ELSE "RateLimitBucket"."resetAt"
+        END
+      RETURNING "count", "resetAt"
+    `);
+
+    // Opportunistic cleanup of long-expired rows (fire-and-forget, low
+    // probability) — replaces the old in-memory map's size-based pruning.
+    if (Math.random() < 0.01) {
+      this.prisma.rateLimitBucket
+        .deleteMany({ where: { resetAt: { lt: new Date(now.getTime() - 60_000) } } })
+        .catch(() => undefined);
     }
-    bucket.count += 1;
-    RateLimitGuard.buckets.set(key, bucket);
 
     const remaining = Math.max(0, options.limit - bucket.count);
-    const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+    const retryAfter = Math.max(
+      1,
+      Math.ceil((bucket.resetAt.getTime() - now.getTime()) / 1000),
+    );
     response.setHeader('X-RateLimit-Limit', options.limit);
     response.setHeader('X-RateLimit-Remaining', remaining);
-    response.setHeader('X-RateLimit-Reset', Math.ceil(bucket.resetAt / 1000));
-
-    if (RateLimitGuard.buckets.size > 10_000) {
-      for (const [bucketKey, value] of RateLimitGuard.buckets) {
-        if (value.resetAt <= now) RateLimitGuard.buckets.delete(bucketKey);
-      }
-    }
+    response.setHeader(
+      'X-RateLimit-Reset',
+      Math.ceil(bucket.resetAt.getTime() / 1000),
+    );
 
     if (bucket.count > options.limit) {
       response.setHeader('Retry-After', retryAfter);

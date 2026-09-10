@@ -201,7 +201,7 @@ model Lead {
 model LeadFollowUp {
   id                String       @id @default(uuid())
   leadId            String
-  userId            String
+  userId            String?
   type              FollowUpType @default(CALL)
   notes             String
   nextFollowUpAt    DateTime?
@@ -217,7 +217,11 @@ model LeadFollowUp {
   // event even if the lead gets reassigned afterward.
   calendarMailbox   String?
   lead              Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // SetNull (not Cascade) — matches every other "who did this" attribution
+  // relation to User (Lead.assignedTo/createdBy, LeadActivity.actor,
+  // EmailLog.user, VendorEvent.createdBy): deleting a user should never
+  // silently destroy the follow-up history logged on a lead.
+  user              User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
   reads             FollowUpRead[]
 
   @@index([nextFollowUpAt, completedAt])
@@ -291,11 +295,32 @@ model PublicEmailOtp {
   email      String   @id
   otpHash    String   @map("otp")
   expiresAt  DateTime
+  attempts   Int      @default(0)
   lastSentAt DateTime @default(now())
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   @@map("email_otp")
+}
+
+// Backs RateLimitGuard. Stored in Postgres (rather than in-process memory)
+// so limits survive process restarts and are enforced consistently across
+// multiple backend instances sharing this database.
+model RateLimitBucket {
+  key     String   @id
+  count   Int      @default(0)
+  resetAt DateTime
+
+  @@index([resetAt])
+}
+
+// Claimed (via a unique-constraint insert) before InboundEmailService acts
+// on a message, so a crash/retry between side effects and the IMAP \Seen
+// flag update reprocesses the message as a no-op instead of sending
+// duplicate relays/notifications or creating duplicate EmailLog rows.
+model ProcessedInboundEmail {
+  messageId   String   @id
+  processedAt DateTime @default(now())
 }
 
 model ContactSubmission {

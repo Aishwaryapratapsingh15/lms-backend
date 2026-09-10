@@ -13,6 +13,7 @@ import { LoginDto } from './dto/login.dto';
 import { User } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
 import { EmailService } from '../email/email.service';
+import { requireJwtSecret } from './jwt-secrets.util';
 
 @Injectable()
 export class AuthService {
@@ -253,9 +254,7 @@ export class AuthService {
     return this.jwtService.sign(
       payload as any,
       {
-        secret:
-          this.configService.get<string>('JWT_ACCESS_SECRET') ||
-          'access-secret',
+        secret: requireJwtSecret(this.configService, 'JWT_ACCESS_SECRET'),
         expiresIn: expiresIn as any,
         issuer: this.configService.get<string>('JWT_ISSUER') || 'lms-backend',
       } as any,

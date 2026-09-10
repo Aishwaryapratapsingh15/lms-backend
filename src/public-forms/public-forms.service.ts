@@ -37,7 +37,6 @@ export class PublicFormsService {
     ) {
       throw new HttpException(
         {
-          status: 429,
           message: `Please wait ${cooldownSeconds} seconds before requesting another OTP`,
         },
         429,
@@ -65,6 +64,7 @@ export class PublicFormsService {
         otpHash: this.hashOtp(email, otp),
         expiresAt: new Date(Date.now() + ttlMinutes * 60_000),
         lastSentAt: new Date(),
+        attempts: 0,
       },
     });
 
@@ -83,15 +83,36 @@ export class PublicFormsService {
       where: { email },
     });
 
-    if (
-      !storedOtp ||
-      storedOtp.expiresAt.getTime() < Date.now() ||
-      storedOtp.otpHash !== this.hashOtp(email, dto.otp.trim())
-    ) {
+    const otpFailed = new HttpException(
+      { message: 'OTP verification failed' },
+      400,
+    );
+
+    if (!storedOtp || storedOtp.expiresAt.getTime() < Date.now()) {
+      throw otpFailed;
+    }
+
+    const maxAttempts = Number(
+      this.config.get('PUBLIC_OTP_MAX_ATTEMPTS') ?? 5,
+    );
+    if (storedOtp.attempts >= maxAttempts) {
+      // Lock this OTP out regardless of which IP the guesses came from —
+      // the per-route rate limit alone only throttles a single source IP.
+      await this.prisma.publicEmailOtp.delete({ where: { email } });
       throw new HttpException(
-        { status: 400, message: 'OTP verification failed' },
+        {
+          message: 'Too many incorrect attempts. Please request a new OTP.',
+        },
         400,
       );
+    }
+
+    if (storedOtp.otpHash !== this.hashOtp(email, dto.otp.trim())) {
+      await this.prisma.publicEmailOtp.update({
+        where: { email },
+        data: { attempts: { increment: 1 } },
+      });
+      throw otpFailed;
     }
 
     const submission = await this.prisma.$transaction(async (tx) => {
@@ -121,7 +142,6 @@ export class PublicFormsService {
       });
     } catch {
       throw new InternalServerErrorException({
-        status: 500,
         message: 'User data stored, but email sending failed',
         submissionId: submission.id,
       });
@@ -207,7 +227,6 @@ export class PublicFormsService {
       });
     } catch {
       throw new InternalServerErrorException({
-        status: 500,
         message: 'Form stored, but email failed to send.',
         submissionId: submission.id,
       });

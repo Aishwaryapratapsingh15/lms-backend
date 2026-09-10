@@ -4,6 +4,7 @@ import { Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { ACCESS_TOKEN_COOKIE } from './cookie.util';
+import { requireJwtSecret } from './jwt-secrets.util';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -15,7 +16,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: (req: Request) => req?.cookies?.[ACCESS_TOKEN_COOKIE] ?? null,
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_ACCESS_SECRET') || 'access-secret',
+      secretOrKey: requireJwtSecret(configService, 'JWT_ACCESS_SECRET'),
     });
   }
 

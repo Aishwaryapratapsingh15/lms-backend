@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
-import { Role } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from './email.service';
 
@@ -117,6 +117,18 @@ export class InboundEmailService implements OnModuleInit, OnModuleDestroy {
     });
     if (!matchedLog?.leadId || !matchedLog.lead) return;
 
+    // Claim this message's own Message-ID before doing anything with side
+    // effects. If a previous run already claimed it (e.g. it crashed or the
+    // \Seen flag update failed after the relay/notification already went
+    // out), this is a no-op instead of sending everything a second time.
+    if (parsed.messageId) {
+      const claimed = await this.claimMessage(parsed.messageId);
+      if (!claimed) {
+        await client.messageFlagsAdd(String(uid), ['\\Seen'], { uid: true });
+        return;
+      }
+    }
+
     const fromAddress = parsed.from?.value?.[0]?.address ?? 'unknown sender';
     const replyText =
       parsed.text || (parsed.html ? parsed.html.replace(/<[^>]+>/g, ' ') : '');
@@ -128,16 +140,46 @@ export class InboundEmailService implements OnModuleInit, OnModuleDestroy {
     // forwarding a notification back to the very person who just wrote it.
     const staffSender = await this.prisma.user.findFirst({
       where: { email: { equals: fromAddress, mode: 'insensitive' } },
-      select: { id: true },
+      select: { id: true, role: true },
     });
     if (staffSender) {
-      if (matchedLog.lead.email) {
+      // Mirror EmailService.sendLeadEmail's rule: a SALES user may only act
+      // on their own assigned leads. Without this check, any active user's
+      // reply gets relayed straight to the client regardless of ownership.
+      const authorized =
+        staffSender.role !== Role.SALES ||
+        matchedLog.lead.assignedToId === staffSender.id;
+
+      if (authorized && matchedLog.lead.email) {
+        // Build the client-facing subject from the original outbound
+        // thread's subject, never from `subject` above — that one is the
+        // staff member's own reply subject, e.g. "Re: Client replied:
+        // <lead>" (they replied to our internal notification email), which
+        // would otherwise leak that internal wording to the client.
+        const originalSubject = matchedLog.subject.replace(/^re:\s*/i, '');
         await this.email.relayStaffReplyToClient({
           leadId: matchedLog.leadId,
           toEmail: matchedLog.lead.email,
-          subject,
+          subject: `Re: ${originalSubject}`,
           body: replyText,
         });
+      } else if (!authorized) {
+        this.logger.warn(
+          `Blocked inbound relay: ${fromAddress} is not the assigned salesperson for lead ${matchedLog.leadId}`,
+        );
+        const owner = matchedLog.lead.assignedTo
+          ? [matchedLog.lead.assignedTo.email]
+          : await this.activeAdminEmails();
+        for (const to of owner) {
+          await this.email.notifyBlockedStaffReply({
+            leadId: matchedLog.leadId,
+            leadName: matchedLog.lead.fullName,
+            staffEmail: fromAddress,
+            toEmail: to,
+            originalSubject: subject,
+            replyText,
+          });
+        }
       }
       await client.messageFlagsAdd(String(uid), ['\\Seen'], { uid: true });
       return;
@@ -165,6 +207,21 @@ export class InboundEmailService implements OnModuleInit, OnModuleDestroy {
     }
 
     await client.messageFlagsAdd(String(uid), ['\\Seen'], { uid: true });
+  }
+
+  private async claimMessage(messageId: string): Promise<boolean> {
+    try {
+      await this.prisma.processedInboundEmail.create({ data: { messageId } });
+      return true;
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        return false;
+      }
+      throw err;
+    }
   }
 
   private activeAdminEmails() {

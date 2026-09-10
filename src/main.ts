@@ -13,7 +13,21 @@ const PUBLIC_FORM_PATHS = new Set([
   '/contact.php',
 ]);
 
+// Fail loudly before the app even boots rather than silently falling back
+// to a hardcoded secret or an unset database connection.
+function assertRequiredEnv() {
+  const required = ['JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET', 'DATABASE_URL'];
+  const missing = required.filter((key) => !process.env[key]);
+  if (missing.length) {
+    console.error(
+      `Missing required environment variable(s): ${missing.join(', ')}. Refusing to start — see .env.example.`,
+    );
+    process.exit(1);
+  }
+}
+
 async function bootstrap() {
+  assertRequiredEnv();
   const app = await NestFactory.create(AppModule);
 
   app.getHttpAdapter().getInstance().set('trust proxy', 1);

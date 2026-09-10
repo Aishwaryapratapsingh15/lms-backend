@@ -25,24 +25,33 @@ export class UsersService {
       throw new ForbiddenException('Admins can create sales users only');
     }
     const email = data.email.trim().toLowerCase();
-    if (
-      await this.prisma.user.findUnique({
-        where: { email },
-        select: { id: true },
-      })
-    ) {
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing?.isActive) {
       throw new ConflictException('A user with this email already exists');
     }
     const password = await bcrypt.hash(data.password, 12);
 
-    const user = await this.prisma.user.create({
-      data: {
-        name: data.name,
-        email,
-        password,
-        role: data.role,
-      },
-    });
+    // A dismissed user keeps their row (and the unique email), so re-adding
+    // the same email reactivates that row instead of inserting a duplicate.
+    const user = existing
+      ? await this.prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            name: data.name,
+            password,
+            role: data.role,
+            isActive: true,
+            sessionVersion: { increment: 1 },
+          },
+        })
+      : await this.prisma.user.create({
+          data: {
+            name: data.name,
+            email,
+            password,
+            role: data.role,
+          },
+        });
 
     const { password: _password, ...safeUser } = user;
     return safeUser;

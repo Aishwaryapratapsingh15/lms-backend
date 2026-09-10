@@ -337,6 +337,30 @@ export class EmailService {
     });
   }
 
+  // A staff member replied from their own mailbox to a lead they don't own
+  // (SALES not assigned to it) — the reply is blocked from reaching the
+  // client (see InboundEmailService), and this tells the actual owner so
+  // the client doesn't just get silently ignored.
+  async notifyBlockedStaffReply(data: {
+    leadId: string;
+    leadName: string;
+    staffEmail: string;
+    toEmail: string;
+    originalSubject: string;
+    replyText: string;
+  }) {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+    const subject = `Blocked reply attempt on lead: ${data.leadName}`;
+    const body = `<p>${this.escape(data.staffEmail)} tried to reply to the client on <strong>${this.escape(data.leadName)}</strong>, but is not the assigned salesperson for this lead, so the reply was NOT sent.</p><p>Original subject: <strong>${this.escape(data.originalSubject)}</strong></p><blockquote style="border-left:3px solid #ccc;margin:0;padding-left:12px;color:#444;">${this.escape(data.replyText).replaceAll('\n', '<br>')}</blockquote><p><a href="${this.escape(`${frontendUrl}/leads/${data.leadId}`)}">Open lead in LMS</a></p>`;
+    return this.sendAutomatedLeadEmail({
+      leadId: data.leadId,
+      toEmail: data.toEmail,
+      subject,
+      body,
+    });
+  }
+
   // Staff sometimes reply from their own real mailbox to the "Client
   // replied" notification instead of using the LMS UI — that reply lands
   // back in the shared inbox just like a client reply would. This is what

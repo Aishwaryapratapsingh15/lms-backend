@@ -116,28 +116,33 @@ export class LeadsService {
 
     if (data.assignedToId) await this.assertActiveSalesUser(data.assignedToId);
 
-    const lead = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.lead.create({
-        data: {
-          ...data,
-          source: data.source ?? LeadSource.WEBSITE,
-          status: data.status ?? LeadStatus.NEW,
-          priority: data.priority ?? LeadPriority.MEDIUM,
-          leadType: data.leadType ?? LeadType.INTERNAL,
-          spokenOn: data.spokenOn ? new Date(data.spokenOn) : undefined,
-          createdById: actor.id,
-          unassignedAt: data.assignedToId ? null : new Date(),
-        },
-        include: leadRelations,
+    let lead;
+    try {
+      lead = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.lead.create({
+          data: {
+            ...data,
+            source: data.source ?? LeadSource.WEBSITE,
+            status: data.status ?? LeadStatus.NEW,
+            priority: data.priority ?? LeadPriority.MEDIUM,
+            leadType: data.leadType ?? LeadType.INTERNAL,
+            spokenOn: data.spokenOn ? new Date(data.spokenOn) : undefined,
+            createdById: actor.id,
+            unassignedAt: data.assignedToId ? null : new Date(),
+          },
+          include: leadRelations,
+        });
+        await tx.leadActivity.create({
+          data: this.activity(created.id, actor.id, LeadActivityType.CREATED, {
+            status: created.status,
+            assignedToId: created.assignedToId,
+          }),
+        });
+        return created;
       });
-      await tx.leadActivity.create({
-        data: this.activity(created.id, actor.id, LeadActivityType.CREATED, {
-          status: created.status,
-          assignedToId: created.assignedToId,
-        }),
-      });
-      return created;
-    });
+    } catch (err) {
+      throw await this.toDuplicateConflict(err, duplicateConditions);
+    }
 
     await Promise.allSettled([
       this.teamsNotifications.notifyNewLead({
@@ -273,36 +278,63 @@ export class LeadsService {
         });
       }
     }
-    return this.prisma.$transaction(async (tx) => {
-      const lead = await tx.lead.update({
-        where: { id },
-        data: {
-          ...data,
-          spokenOn:
-            data.spokenOn === undefined
-              ? undefined
-              : data.spokenOn
-                ? new Date(data.spokenOn)
-                : null,
-        },
-        include: leadRelations,
-      });
-      await tx.leadActivity.create({
-        data: this.activity(id, actor.id, LeadActivityType.UPDATED, {
-          before: {
-            fullName: current.fullName,
-            email: current.email,
-            phone: current.phone,
-            company: current.company,
-            source: current.source,
-            priority: current.priority,
-            leadType: current.leadType,
-            notes: current.notes,
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const lead = await tx.lead.update({
+          where: { id },
+          data: {
+            ...data,
+            spokenOn:
+              data.spokenOn === undefined
+                ? undefined
+                : data.spokenOn
+                  ? new Date(data.spokenOn)
+                  : null,
           },
-          changes: { ...data } as Prisma.InputJsonObject,
-        }),
+          include: leadRelations,
+        });
+        await tx.leadActivity.create({
+          data: this.activity(id, actor.id, LeadActivityType.UPDATED, {
+            before: {
+              fullName: current.fullName,
+              email: current.email,
+              phone: current.phone,
+              company: current.company,
+              source: current.source,
+              priority: current.priority,
+              leadType: current.leadType,
+              notes: current.notes,
+            },
+            changes: { ...data } as Prisma.InputJsonObject,
+          }),
+        });
+        return lead;
       });
-      return lead;
+    } catch (err) {
+      throw await this.toDuplicateConflict(err, duplicateConditions, id);
+    }
+  }
+
+  private async toDuplicateConflict(
+    err: unknown,
+    duplicateConditions: Prisma.LeadWhereInput[],
+    excludeId?: string,
+  ) {
+    const isUniqueViolation =
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002';
+    if (!isUniqueViolation || !duplicateConditions.length) return err;
+    const duplicate = await this.prisma.lead.findFirst({
+      where: {
+        archivedAt: null,
+        OR: duplicateConditions,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+      select: { id: true, fullName: true, email: true, phone: true },
+    });
+    return new ConflictException({
+      message: 'A lead with this email or phone already exists',
+      duplicate,
     });
   }
 
@@ -355,7 +387,10 @@ export class LeadsService {
         where: { id: leadId },
         data: {
           status,
-          wonAt: status === LeadStatus.WON ? new Date() : lead.wonAt,
+          wonAt:
+            status === LeadStatus.WON
+              ? (lead.wonAt ?? new Date())
+              : null,
         },
       });
       await tx.leadActivity.create({
@@ -428,7 +463,9 @@ export class LeadsService {
               select: { email: true },
             })
           : null;
-        const calendarMailbox = assignedUser?.email ?? followUp.user.email;
+        // followUp.user is guaranteed non-null here — it was just created
+        // with userId: actor.id, the same user whose request this is.
+        const calendarMailbox = assignedUser?.email ?? followUp.user!.email;
 
         const isMeeting = followUp.type === 'MEETING';
         const { eventId, joinUrl, error } =
@@ -501,11 +538,15 @@ export class LeadsService {
     });
 
     if (followUp.calendarEventId) {
+      // calendarMailbox is normally always set alongside calendarEventId;
+      // the followUp.user fallback only matters for rows created before
+      // that field existed — and since the creating user can now be
+      // deleted (SetNull), that fallback may itself be unavailable.
+      const mailbox = followUp.calendarMailbox ?? followUp.user?.email;
       try {
-        await this.calendar.deleteEvent(
-          followUp.calendarMailbox ?? followUp.user.email,
-          followUp.calendarEventId,
-        );
+        if (mailbox) {
+          await this.calendar.deleteEvent(mailbox, followUp.calendarEventId);
+        }
         await this.prisma.leadFollowUp.update({
           where: { id },
           data: { calendarEventId: null, teamsJoinUrl: null },
@@ -520,8 +561,13 @@ export class LeadsService {
 
   async reminders(query: RemindersQueryDto, actor: Actor) {
     const now = new Date();
-    const startToday = new Date(now);
-    startToday.setUTCHours(0, 0, 0, 0);
+    // The viewer's local midnight, passed as a UTC instant, so "today"
+    // matches their calendar day rather than the UTC day — falls back to
+    // UTC midnight for API callers that don't send it.
+    const startToday = query.todayStart
+      ? new Date(query.todayStart)
+      : new Date(now);
+    if (!query.todayStart) startToday.setUTCHours(0, 0, 0, 0);
     const endToday = new Date(startToday);
     endToday.setUTCDate(endToday.getUTCDate() + 1);
     let dateFilter: Prisma.DateTimeNullableFilter = { not: null };
@@ -590,7 +636,7 @@ export class LeadsService {
     return this.prisma.leadFollowUp.findMany({
       where: {
         nextFollowUpAt: { gte: new Date(query.from), lt: new Date(query.to) },
-        lead: this.accessScope(actor),
+        lead: { ...this.accessScope(actor), archivedAt: null },
       },
       include: {
         lead: {
