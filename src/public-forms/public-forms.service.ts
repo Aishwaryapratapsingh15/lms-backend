@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import { LeadActivityType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ContactSubmissionDto } from './dto/contact-submission.dto';
 import { SendOtpDto } from './dto/send-otp.dto';
@@ -157,6 +158,7 @@ export class PublicFormsService {
 
   async submitContact(dto: ContactSubmissionDto) {
     const email = dto.email.trim().toLowerCase();
+    const phone = `+${dto.phoneCode.trim()} ${dto.phone.trim()}`;
     const { submission, lead } = await this.prisma.$transaction(async (tx) => {
       const created = await tx.contactSubmission.create({
         data: {
@@ -173,11 +175,44 @@ export class PublicFormsService {
           message: this.optional(dto.message),
         },
       });
+
+      // Someone who already has an open lead and contacts again should land
+      // on that SAME lead, not spawn a second competing record — this is
+      // the "one active lead per email/phone" rule the DB now enforces via
+      // partial unique indexes (see migration
+      // 20260910000000_add_lead_active_duplicate_unique_indexes). Without
+      // this check, a repeat public-form submission from an existing
+      // customer would crash with an unhandled unique-constraint error
+      // instead of gracefully attaching to their existing lead.
+      const existing = await tx.lead.findFirst({
+        where: {
+          archivedAt: null,
+          OR: [{ email: { equals: email, mode: 'insensitive' } }, { phone }],
+        },
+      });
+      if (existing) {
+        await tx.leadActivity.create({
+          data: {
+            leadId: existing.id,
+            type: LeadActivityType.UPDATED,
+            details: {
+              source: 'contact-form-resubmission',
+              name: dto.name.trim(),
+              companyName: dto.companyName.trim(),
+              requirement: dto.requirement.trim(),
+              product: this.optional(dto.product),
+              message: this.optional(dto.message),
+            },
+          },
+        });
+        return { submission: created, lead: existing };
+      }
+
       const leadRecord = await tx.lead.create({
         data: {
           fullName: dto.name.trim(),
           email,
-          phone: `+${dto.phoneCode.trim()} ${dto.phone.trim()}`,
+          phone,
           company: dto.companyName.trim(),
           source: 'WEBSITE',
           leadType: 'EXTERNAL',
