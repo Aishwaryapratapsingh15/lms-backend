@@ -42,6 +42,7 @@ echo ""
 echo "== 2. Archiving duplicates (email) =="
 sudo docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
 BEGIN;
+
 WITH ranked AS (
   SELECT l.id,
     ROW_NUMBER() OVER (
@@ -59,14 +60,17 @@ WITH ranked AS (
   FROM "Lead" l
   WHERE l."archivedAt" IS NULL AND l.email IS NOT NULL
 ),
-to_archive AS (SELECT id FROM ranked WHERE rn > 1)
-UPDATE "Lead" SET "archivedAt" = now() WHERE id IN (SELECT id FROM to_archive);
-
+archived AS (
+  UPDATE "Lead" SET "archivedAt" = now()
+  WHERE id IN (SELECT id FROM ranked WHERE rn > 1)
+  RETURNING id
+)
 INSERT INTO "LeadActivity" (id, "leadId", type, details, "createdAt")
 SELECT gen_random_uuid(), id, 'ARCHIVED'::"LeadActivityType",
        jsonb_build_object('reason', 'duplicate-email-reconciliation, migration 20260910000000'),
        now()
-FROM (SELECT id FROM ranked WHERE rn > 1) x;
+FROM archived;
+
 COMMIT;
 SQL
 
