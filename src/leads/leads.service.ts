@@ -114,7 +114,7 @@ export class LeadsService {
       }
     }
 
-    if (data.assignedToId) await this.assertActiveSalesUser(data.assignedToId);
+    if (data.assignedToId) await this.assertAssignableUser(data.assignedToId);
 
     let lead;
     try {
@@ -347,7 +347,7 @@ export class LeadsService {
         include: leadRelations,
       });
     }
-    if (salesId) await this.assertActiveSalesUser(salesId);
+    if (salesId) await this.assertAssignableUser(salesId);
     const updated = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.lead.update({
         where: { id: leadId },
@@ -869,11 +869,14 @@ export class LeadsService {
     };
   }
 
-  private async assertActiveSalesUser(id: string) {
+  // A lead can be assigned to a SALES rep (the normal case) or an ADMIN
+  // (e.g. an admin picking up a lead themselves) — never SUPER_ADMIN, which
+  // stays a pure oversight role.
+  private async assertAssignableUser(id: string) {
     const user = await this.prisma.user.findFirst({
-      where: { id, role: Role.SALES, isActive: true },
+      where: { id, role: { in: [Role.SALES, Role.ADMIN] }, isActive: true },
       select: { id: true },
     });
-    if (!user) throw new NotFoundException('Active sales user not found');
+    if (!user) throw new NotFoundException('Active assignable user not found');
   }
 }
