@@ -135,7 +135,7 @@ export class PublicFormsService {
       await this.sendMail({
         to: this.recipientList(
           'PUBLIC_ENQUIRY_TO',
-          'HR@EICETECHNOLOGY.COM,harshita.chaurasiya@eicetechnology.com,info@eicetechnology.com'
+          'HR@EICETECHNOLOGY.COM,harshita.chaurasiya@eicetechnology.com,info@eicetechnology.com',
         ),
         subject: `User Message from ${name}`,
         html: this.enquiryEmailHtml(dto),
