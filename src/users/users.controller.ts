@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -19,6 +20,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CreateUserDto } from './dto/create-user.dto';
+import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { RequestWithUser } from '../common/interfaces/request-with-user.interface';
 
 @ApiTags('Users')
@@ -42,8 +44,8 @@ export class UsersController {
   @Get()
   @Roles('SUPER_ADMIN', 'ADMIN')
   @ApiOperation({ summary: 'List all users' })
-  listUsers() {
-    return this.usersService.findAll();
+  listUsers(@Query() query: ListUsersQueryDto) {
+    return this.usersService.findAll(query.search);
   }
 
   @Get(':id')

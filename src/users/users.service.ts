@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { escapeLikePattern } from '../common/utils/escape-like-pattern';
 import { User, Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
@@ -57,9 +58,21 @@ export class UsersService {
     return safeUser;
   }
 
-  async findAll() {
+  async findAll(search?: string) {
     return this.prisma.user.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        ...(search
+          ? {
+              OR: ['name', 'email'].map((field) => ({
+                [field]: {
+                  contains: escapeLikePattern(search),
+                  mode: 'insensitive' as const,
+                },
+              })),
+            }
+          : {}),
+      },
       select: {
         id: true,
         name: true,

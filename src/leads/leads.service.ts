@@ -14,6 +14,7 @@ import {
   Role,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { escapeLikePattern } from '../common/utils/escape-like-pattern';
 import { CalendarService } from '../calendar/calendar.service';
 import { TeamsNotificationService } from '../notifications/teams-notification.service';
 import { EmailService } from '../email/email.service';
@@ -181,9 +182,10 @@ export class LeadsService {
   async findAll(query: ListLeadsQueryDto, actor: Actor) {
     const filters: Prisma.LeadWhereInput[] = [this.accessScope(actor)];
     if (query.search) {
+      const search = escapeLikePattern(query.search);
       filters.push({
         OR: ['fullName', 'email', 'phone', 'company'].map((field) => ({
-          [field]: { contains: query.search, mode: 'insensitive' },
+          [field]: { contains: search, mode: 'insensitive' },
         })) as Prisma.LeadWhereInput[],
       });
     }
@@ -734,6 +736,7 @@ export class LeadsService {
       byPriority,
       overdueFollowUps,
       assigned,
+      totalProspects,
       callsLogged,
       meetingsLogged,
       followUpsLogged,
@@ -764,6 +767,20 @@ export class LeadsService {
         }),
         this.prisma.lead.count({
           where: { AND: [where, { assignedToId: { not: null } }] },
+        }),
+        // Leads currently sitting in the Prospect stage (prospectedAt set and
+        // not yet moved back to Leads) — separate from `total`, which counts
+        // every non-archived lead regardless of prospect status. Filtered by
+        // prospectedAt (when the lead moved into Prospect) rather than
+        // createdAt, same as recentWins is filtered by wonAt below — a lead
+        // created long before the selected range but moved into Prospect
+        // within it still belongs in this count.
+        this.prisma.lead.count({
+          where: {
+            ...this.accessScope(actor),
+            archivedAt: null,
+            prospectedAt: createdAt ? { not: null, ...createdAt } : { not: null },
+          },
         }),
         this.prisma.leadFollowUp.count({
           where: { type: 'CALL', createdAt, lead: followUpScope },
@@ -849,6 +866,7 @@ export class LeadsService {
       total,
       assigned,
       unassigned: total - assigned,
+      totalProspects,
       won,
       conversionRate: total ? Number(((won / total) * 100).toFixed(2)) : 0,
       overdueFollowUps,
