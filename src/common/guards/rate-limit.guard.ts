@@ -13,6 +13,7 @@ import {
   RATE_LIMIT_KEY,
   RateLimitOptions,
 } from '../decorators/rate-limit.decorator';
+import { RequestWithUser } from '../interfaces/request-with-user.interface';
 
 @Injectable()
 export class RateLimitGuard implements CanActivate {
@@ -32,8 +33,12 @@ export class RateLimitGuard implements CanActivate {
     const response = context.switchToHttp().getResponse<Response>();
     const now = new Date();
     const route = request.route?.path ?? request.path;
-    const ip = request.ip || request.socket.remoteAddress || 'unknown';
-    const key = `${request.method}:${route}:${ip}`;
+    // Prefer the authenticated user's own identity so one person's quota is
+    // theirs alone; falls back to IP for routes that run before login (e.g.
+    // auth/OTP), where there is no req.user yet.
+    const userId = (request as RequestWithUser).user?.id;
+    const subject = userId ? `user:${userId}` : `ip:${request.ip || request.socket.remoteAddress || 'unknown'}`;
+    const key = `${request.method}:${route}:${subject}`;
     const resetAt = new Date(now.getTime() + options.windowSeconds * 1000);
 
     // Single atomic upsert, backed by Postgres rather than in-process

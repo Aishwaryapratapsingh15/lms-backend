@@ -28,6 +28,7 @@ export class EmailService {
       bccEmails?: string[];
       subject: string;
       body: string;
+      attachments?: Express.Multer.File[];
     },
     actor: { id: string; role: Role },
   ) {
@@ -65,6 +66,7 @@ export class EmailService {
     const bccList = [
       ...new Set([...(data.bccEmails ?? []), ...emailSettings.bccEmails]),
     ];
+    const attachmentNames = (data.attachments ?? []).map((file) => file.originalname);
 
     const transporter = nodemailer.createTransport({
       host: smtpHost,
@@ -86,6 +88,11 @@ export class EmailService {
         subject: data.subject,
         html: data.body,
         text: data.body,
+        attachments: (data.attachments ?? []).map((file) => ({
+          filename: file.originalname,
+          content: file.buffer,
+          contentType: file.mimetype,
+        })),
       });
       sentStatus = response?.accepted?.length ? 'SENT' : 'FAILED';
     }
@@ -99,6 +106,7 @@ export class EmailService {
         bccEmails: bccList,
         subject: data.subject,
         body: data.body,
+        attachments: attachmentNames,
         status: sentStatus,
         messageId: response?.messageId ?? null,
         sentAt: sentStatus === 'SENT' ? new Date() : null,

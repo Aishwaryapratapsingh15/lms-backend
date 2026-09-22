@@ -157,38 +157,38 @@ model PasswordResetToken {
 }
 
 model Lead {
-  id                String         @id @default(uuid())
-  fullName          String
-  email             String?
-  phone             String?
-  company           String?
-  source            LeadSource     @default(WEBSITE)
-  status            LeadStatus     @default(NEW)
-  priority          LeadPriority   @default(MEDIUM)
-  leadType          LeadType       @default(INTERNAL)
-  city              String?
-  state             String?
-  product           String?
-  quantity          Int?
+  id                 String         @id @default(uuid())
+  fullName           String
+  email              String?
+  phone              String?
+  company            String?
+  source             LeadSource     @default(WEBSITE)
+  status             LeadStatus     @default(NEW)
+  priority           LeadPriority   @default(MEDIUM)
+  leadType           LeadType       @default(INTERNAL)
+  city               String?
+  state              String?
+  product            String?
+  quantity           Int?
   productDescription String?
-  spokenOn          DateTime?
-  assignedToId      String?
-  createdById       String?
-  notes             String?
-  nextFollowUpAt    DateTime?
-  archivedAt        DateTime?
-  unassignedAt      DateTime?      @default(now())
-  slaReminderSentAt DateTime?
-  slaEscalatedAt    DateTime?
-  wonAt             DateTime?
-  prospectedAt      DateTime?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-  assignedTo        User?          @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
-  createdBy         User?          @relation("CreatedLeads", fields: [createdById], references: [id], onDelete: SetNull)
-  followUps         LeadFollowUp[]
-  emailLogs         EmailLog[]
-  activities        LeadActivity[]
+  spokenOn           DateTime?
+  assignedToId       String?
+  createdById        String?
+  notes              String?
+  nextFollowUpAt     DateTime?
+  archivedAt         DateTime?
+  unassignedAt       DateTime?      @default(now())
+  slaReminderSentAt  DateTime?
+  slaEscalatedAt     DateTime?
+  wonAt              DateTime?
+  prospectedAt       DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  assignedTo         User?          @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdBy          User?          @relation("CreatedLeads", fields: [createdById], references: [id], onDelete: SetNull)
+  followUps          LeadFollowUp[]
+  emailLogs          EmailLog[]
+  activities         LeadActivity[]
 
   @@index([assignedToId, archivedAt, createdAt])
   @@index([assignedToId, archivedAt, unassignedAt])
@@ -199,14 +199,14 @@ model Lead {
 }
 
 model LeadFollowUp {
-  id                String       @id @default(uuid())
+  id                String         @id @default(uuid())
   leadId            String
   userId            String?
-  type              FollowUpType @default(CALL)
+  type              FollowUpType   @default(CALL)
   notes             String
   nextFollowUpAt    DateTime?
   completedAt       DateTime?
-  createdAt         DateTime     @default(now())
+  createdAt         DateTime       @default(now())
   calendarEventId   String?
   calendarSyncError String?
   teamsJoinUrl      String?
@@ -216,12 +216,12 @@ model LeadFollowUp {
   // Recorded separately from userId so completion can delete the right
   // event even if the lead gets reassigned afterward.
   calendarMailbox   String?
-  lead              Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead              Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
   // SetNull (not Cascade) — matches every other "who did this" attribution
   // relation to User (Lead.assignedTo/createdBy, LeadActivity.actor,
   // EmailLog.user, VendorEvent.createdBy): deleting a user should never
   // silently destroy the follow-up history logged on a lead.
-  user              User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user              User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
   reads             FollowUpRead[]
 
   @@index([nextFollowUpAt, completedAt])
@@ -258,23 +258,24 @@ model LeadActivity {
 }
 
 model EmailLog {
-  id        String         @id @default(uuid())
-  leadId    String?
-  userId    String?
-  toEmail   String
-  ccEmails  String[]
-  bccEmails String[]
-  subject   String
-  body      String
-  status    EmailStatus    @default(PENDING)
-  direction EmailDirection @default(OUTBOUND)
+  id          String         @id @default(uuid())
+  leadId      String?
+  userId      String?
+  toEmail     String
+  ccEmails    String[]
+  bccEmails   String[]
+  subject     String
+  body        String
+  attachments String[]       @default([])
+  status      EmailStatus    @default(PENDING)
+  direction   EmailDirection @default(OUTBOUND)
   // Outgoing mail's own Message-ID — an inbound reply's In-Reply-To/References
   // header is matched against this to find which lead it belongs to.
-  messageId String?
-  sentAt    DateTime?
-  createdAt DateTime       @default(now())
-  lead      Lead?          @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  user      User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  messageId   String?
+  sentAt      DateTime?
+  createdAt   DateTime       @default(now())
+  lead        Lead?          @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  user        User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([messageId])
 }
